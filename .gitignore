@@ -1,0 +1,34 @@
+# =========================
+# 1. ENVIRONMENT & SECRETS
+# =========================
+.env
+.env.*
+*.pem
+
+# =========================
+# 2. PYTHON & DJANGO
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+db.sqlite3
+media/
+staticfiles/
+
+# =========================
+# 3. NEXT.JS & NODE (Future-proofing)
+# =========================
+node_modules/
+.next/
+out/
+build/
+.npm/
+
+# =========================
+# 4. OS JUNK
+# =========================
+.DS_Store
+Thumbs.db
