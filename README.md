@@ -7,6 +7,7 @@ Project Mitori is a custom-built stock trading platform I am developing from scr
 ### Bird's Eye View of the project
 Mainly i intend to create a custom build stock trading application, with various technologies and architectural approaches , observing trade-offs and critically analyzing the choices of what create a real enterprise application.
 
+```mermaid
 graph TD
     %% Define Nodes
     Client[("💻 Next.js Client<br/>(The Terminal)")]
