@@ -48,14 +48,14 @@ INSTALLED_APPS = [
 
 REST_FRAMEWORK ={
     'DEFAULT_PERMISSION_CLASSES':[
-        'rest_framework.permissions.isAuthenticated',
+        'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_AUTHENTICATED_CLASSES':[
         'rest_framework.authentication.SessionAuthentication'
         'rest_framework.authentication.BasicAuthentication'
     ],
-    'DEFAULT_PAGINATION_CLASSES':'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE':25
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 50,
 }
 
 
