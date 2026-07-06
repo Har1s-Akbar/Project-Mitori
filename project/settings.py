@@ -43,7 +43,21 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'accounts.apps.AccountsConfig',
     'core_ledger.apps.CoreLedgerConfig',
+    'rest_framework',
 ]
+
+REST_FRAMEWORK ={
+    'DEFAULT_PERMISSION_CLASSES':[
+        'rest_framework.permissions.isAuthenticated',
+    ],
+    'DEFAULT_AUTHENTICATED_CLASSES':[
+        'rest_framework.authentication.SessionAuthentication'
+        'rest_framework.authentication.BasicAuthentication'
+    ],
+    'DEFAULT_PAGINATION_CLASSES':'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE':25
+}
+
 
 AUTH_USER_MODEL = 'accounts.MyUser'
 

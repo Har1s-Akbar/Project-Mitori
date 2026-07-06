@@ -29,7 +29,7 @@ class LedgerTransaction(models.Model):
     portfolio = models.ForeignKey(Portfolio, on_delete=models.CASCADE)
     transaction_type = models.CharField(max_length=10, choices=TransactionType.choices)
     amount = models.DecimalField(max_digits=15, decimal_places=3, null=False, blank=False)
-    status = models.CharField(max_length=10, choices=Status.choices)
+    status = models.CharField(max_length=10, choices=Status.choices, default = Status.PENDING)
     asset_symbol = models.CharField(max_length=8, blank=True, null=True)
     time_stamp = models.DateTimeField(auto_now_add=True)
     
