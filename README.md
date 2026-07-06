@@ -10,10 +10,10 @@ Mainly i intend to create a custom build stock trading application, with various
 ```mermaid
 graph TD
     %% Define Nodes
-    Client[("💻 Next.js Client<br/>(The Terminal)")]
-    FastAPI["⚡ FastAPI Microservice<br/>(The Casino Floor / Order Book)"]
-    Django["🛡️ Django Microservice<br/>(The Vault / Auth & Ledger)"]
-    DB[("🗄️ PostgreSQL<br/>(Immutable State)")]
+    Client[(" Next.js Client<br/>(The Terminal)")]
+    FastAPI[" FastAPI Microservice<br/>(The Casino Floor / Order Book)"]
+    Django[" Django Microservice<br/>(The Vault / Auth & Ledger)"]
+    DB[(" PostgreSQL<br/>(Immutable State)")]
 
     %% Define Connections
     Client -- "1. Trading Intents (Buy/Sell)<br/>WebSockets / Async HTTP" --> FastAPI
@@ -26,7 +26,9 @@ graph TD
     style FastAPI fill:#009688,stroke:#004d40,stroke-width:2px,color:#ffffff
     style Django fill:#0c4b33,stroke:#000000,stroke-width:2px,color:#ffffff
     style DB fill:#336791,stroke:#000000,stroke-width:2px,color:#ffffff
+```
 
+### Tech stack
 
 ### Tech stack
 * Django for auth and maintaining the certain data in the database which will be postgresql
