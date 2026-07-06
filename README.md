@@ -10,9 +10,9 @@ Mainly i intend to create a custom build stock trading application, with various
 ```mermaid
 graph TD
     %% Define Nodes
-    Client[(" Next.js Client<br/>(The Terminal)")]
-    FastAPI[" FastAPI Microservice<br/>(The Casino Floor / Order Book)"]
-    Django[" Django Microservice<br/>(The Vault / Auth & Ledger)"]
+    Client[(" Next.js Client<br/>(UI)")]
+    FastAPI[" FastAPI Microservice<br/>(Order Book)"]
+    Django[" Django Microservice<br/>(Auth & Ledger)"]
     DB[(" PostgreSQL<br/>(Immutable State)")]
 
     %% Define Connections
