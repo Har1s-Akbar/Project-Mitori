@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import Enum
 from datetime import datetime
-from uuid import uuid8
+from uuid import uuid4
 
 class Side(str,Enum):
     SELL="sell"
@@ -15,14 +15,12 @@ class Order():
     price:float
     number_of_shares:int
     date_time:str = field(default_factory=lambda: str(datetime.now()))
-    id:str=field(default_factory=lambda:str(uuid8()))
+    id:str=field(default_factory=lambda:str(uuid4()))
 
-    def is_filled(self) -> bool:
-        if(self.number_of_shares == 0):
-            return self.number_of_shares
-        else:
-            return self.number_of_shares
-        
+    @property
+    def is_filled(self) ->bool:
+        return self.number_of_shares <=0
+
 
 @dataclass(slots=True)
 class Trade():
@@ -32,5 +30,5 @@ class Trade():
     buyer_id:str
     seller_id:str
     date_time:str = field(default_factory=lambda:str(datetime.now()))
-    id:str=field(default_factoty=lambda:str(uuid8()))
+    id:str=field(default_factory=lambda:str(uuid4()))
 
