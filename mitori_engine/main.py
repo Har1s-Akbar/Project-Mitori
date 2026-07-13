@@ -1,8 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 import uvicorn
-from .core.models import Side, Order
-from .core.engine import OrderBook
+from core.models import Side, Order
+from core.engine import OrderBook
 
 app = FastAPI(
     title ="mitori-engine",
@@ -18,7 +18,7 @@ MARKET ={
 
 class OrderReq(BaseModel):
     ticker:str = Field(min_length=1, max_length=10, title="Ticker", description="Ticker is required", strict=True)
-    side:Side = Field(title="side" , description="Side is required", strict=True)
+    side:Side = Field(title="side" , description="Side is required")
     price:float = Field(ge=1, lt=1000000000.0, allow_inf_nan=False, strict=True)
     number_of_shares:int = Field(ge=1, lt=2000, allow_inf_nan=False, strict=True)
 
