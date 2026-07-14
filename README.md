@@ -53,7 +53,7 @@ This README serves as my daily development log.
 
 ### What I've Built So Far
 
-### Django (The backend Monster)
+### mitori_backend (The backend)
 * I am tackling Django head on first, Django will serve as the locker room or the ultimate lock for our data, we will use django mainly for:
 * Custom Authentication
 * Django comes with built ini support for several databases and postgresql is one of them we need that because it will be a dataextensive application and we need to have a framework that is proven the test of time , has strong policies , data integrity policies and out of the gate security for everything an enterprise application is supposed to encounter
@@ -103,3 +103,65 @@ __That flow is Django -> FastApi -> Nextjs__
 * [ ] Proper email verification workflow
 
 __when i'll be patching these loopholes i'll refernce this readme in the commit and i'll also be tagging it in what commit this certain improvements where made__
+
+### mitori_engine (The Engine)
+We need FastApis for out matching engine , Instead of frontend reaching out to backend django everytime we have an order we do not reach out to our backend django and register it.
+Because in a high frequency system like this there can be certain situations
+* Order stays hanging , is not filled.
+* Order is canceled after a certain time.
+* Order is edited and replaced.
+As a System Engineer you have to look at what you want your application to do and how the user is going to use it.
+* An order is an intent it is not certain until it is matched and filled.
+* A trade after the match is certain.
+We do not want any uncertainity in our database , we only want facts and data that is certain , so nothing gets past our django until we know it is not an intent it is a fact.
+
+keeping that architecture in mind we design our matching engine.
+
+we define the folder structure of the project.
+
+    mitori_engine
+        ->core
+            ->__init__.py
+            -> engine.py
+            -> models.py
+        main.py
+        requirements.txt
+
+mitori_engine will be our main directory where we will be implementing our engine.
+core will be the directry that will house engine and models.
+main.py is our file that will have configuered routes for our api.
+
+**core**
+As the name suggests core holds the core functionality of our FastApi engine.
+it houses two files
+*models (Memory Optimization)*
+In models we deal with the problem of memory and speed.
+if we chose normal class with dict overhead in it we will be trading off pure speed and memory with ease of use.
+since it is a systems level question and we have to look at it from that perspective we need to know what our system will be doing , our system will be handling thousands of request in such a case normal , generic class will bloat our memory and will make our
+engine slow __which is the thing we are trying to avoid__ because hypothetically our engine will be dealing with great number of requests.
+To make our engine fast we will strip the python class from it's under the hood dict which will transform python class into collection of only necessary things we want
+* dataclass
+* slot
+python provides these option so that we can remove underhood dict from the class and give us speed and memory saving.
+
+**engine (Matching core)**
+Engine will be the place where we will create our matching engine.
+we will take advantage of the heap data structure of the python for this purpose, we will be creating priority queue strictly based on metrics that, the priority will be given to the order that is 
+* price
+* date_time
+* order_id
+we want the best price according to our criteria to be on the top of the heap, if we get two orders with equivalent price then we move on to our next priority criteria  which is the time , in our order we have the time explicitly calculated at the time of the order.
+this covers our  priority criteria.
+Now the architecture of the order book we wil have
+
+    Order Book
+    ->buy side list
+    ->sell side list
+    ->ticker
+
+when a user would be requesting to buy or sell a certain stock , ticker will be included in that request and based on that ticker we will chose which order book we want the order to be directed to based on the ticker.
+
+*buy side* 
+buy side will be a max heap with the highest price at the top
+*sell side*
+sell side  will be a min heap with lowest price on the top
