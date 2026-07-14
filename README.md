@@ -131,7 +131,7 @@ mitori_engine will be our main directory where we will be implementing our engin
 core will be the directry that will house engine and models.
 main.py is our file that will have configuered routes for our api.
 
-**core**
+**1. core**
 As the name suggests core holds the core functionality of our FastApi engine.
 it houses two files
 *models (Memory Optimization)*
@@ -144,7 +144,7 @@ To make our engine fast we will strip the python class from it's under the hood 
 * slot
 python provides these option so that we can remove underhood dict from the class and give us speed and memory saving.
 
-**engine (Matching core)**
+**2. engine (Matching core)**
 Engine will be the place where we will create our matching engine.
 we will take advantage of the heap data structure of the python for this purpose, we will be creating priority queue strictly based on metrics that, the priority will be given to the order that is 
 * price
@@ -155,13 +155,28 @@ this covers our  priority criteria.
 Now the architecture of the order book we wil have
 
     Order Book
-    ->buy side list
-    ->sell side list
-    ->ticker
+        ->buy side list
+        ->sell side list
+        ->ticker
 
 when a user would be requesting to buy or sell a certain stock , ticker will be included in that request and based on that ticker we will chose which order book we want the order to be directed to based on the ticker.
 
-*buy side* 
-buy side will be a max heap with the highest price at the top
-*sell side*
-sell side  will be a min heap with lowest price on the top
+* buy side 
+    buy side will be a max heap with the highest price at the top
+*sell side
+    sell side  will be a min heap with lowest price on the top
+
+
+**3. main**
+In the main we implement
+* pydantic model for mainatining data integrity of the data received from the user request.
+* maintaining the record for markets so that no malicious user can create another order book with script injection.
+* route configuration and making sure that engine is running
+
+### Future Improvements in engine microservice
+* [ ] Tombstone Cancellation
+* [ ] Partial refill injection into heap
+* [ ] MultiWorker scaling for the offered Market
+* [ ] Idempotency Protection
+* [ ] Write ahead log
+* [ ] Cryptographic Ownership for the order
