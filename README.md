@@ -132,10 +132,10 @@ core will be the directry that will house engine and models.
 main.py is our file that will have configuered routes for our api.
 
 **1. core**
-As the name suggests core holds the core functionality of our FastApi engine.
+* As the name suggests core holds the core functionality of our FastApi engine.
 it houses two files
 *models (Memory Optimization)*
-In models we deal with the problem of memory and speed.
+* In models we deal with the problem of memory and speed.
 if we chose normal class with dict overhead in it we will be trading off pure speed and memory with ease of use.
 since it is a systems level question and we have to look at it from that perspective we need to know what our system will be doing , our system will be handling thousands of request in such a case normal , generic class will bloat our memory and will make our
 engine slow __which is the thing we are trying to avoid__ because hypothetically our engine will be dealing with great number of requests.
@@ -145,7 +145,7 @@ To make our engine fast we will strip the python class from it's under the hood 
 python provides these option so that we can remove underhood dict from the class and give us speed and memory saving.
 
 **2. engine (Matching core)**
-Engine will be the place where we will create our matching engine.
+* Engine will be the place where we will create our matching engine.
 we will take advantage of the heap data structure of the python for this purpose, we will be creating priority queue strictly based on metrics that, the priority will be given to the order that is 
 * price
 * date_time
