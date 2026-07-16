@@ -1,13 +1,29 @@
-from fastapi import FastAPI, HTTPException
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel, Field
 import uvicorn
 from core.models import Side, Order
 from core.engine import OrderBook
+import redis.asyncio as redis
+from infrastructure.client import create_redis_pool
+from api.dependencies import get_redis
+import json
+import dataclasses
+
+@asynccontextmanager
+async def lifespan(app:FastAPI):
+    pool = create_redis_pool()
+    app.state.redis = redis.Redis(connection_pool=pool)
+
+    yield
+
+    await app.state.redis.close();
 
 app = FastAPI(
     title ="mitori-engine",
     discription = "fast paced matching engine for project mitori",
-    version = "1.0.0"
+    version = "1.0.0",
+    lifespan=lifespan
 )
 
 MARKET ={
@@ -23,7 +39,7 @@ class OrderReq(BaseModel):
     number_of_shares:int = Field(ge=1, lt=2000, allow_inf_nan=False, strict=True)
 
 @app.post("/order")
-async def place_order(order:OrderReq):
+async def place_order(order:OrderReq, redis_client : redis.Redis = Depends(get_redis)):
     if order.ticker not in MARKET:
         raise HTTPException(status_code=404,detail="Ticker does not exist")
     target_book = MARKET[order.ticker]
@@ -37,6 +53,20 @@ async def place_order(order:OrderReq):
 
     target_book.add_order(new_order)
     executed_trades = target_book.execute()
+
+    if executed_trades:
+        for trade in executed_trades:
+            trade_dict = dataclasses.asdict(trade)
+            trade_data = {
+                "ticker" : order.ticker,
+                "data": json.dumps(trade_dict)
+            }
+            await redis_client.xadd(
+                name="executed_trades_stream",
+                fields=trade_data,
+                maxlen=100000,
+                approximate=True
+            )
 
     return {
         "message":"Order Accepted",

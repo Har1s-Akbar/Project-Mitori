@@ -1,4 +1,3 @@
-import asyncio
 import redis.asyncio as redis
 from redis.asyncio import BlockingConnectionPool
 
