@@ -95,7 +95,7 @@ __That flow is Django -> FastApi -> Nextjs__
 
 ### Future Improvements in Django microservice
 * [ ] Solving Race condition
-* [ ] implementing JWT (I will tackle this in Nextjs section)
+* [ ] implementing JWT (fixing patch 1.1)
 * [ ] Implementing Logger
 * [ ] DDOS attack
 * [ ] Testing
