@@ -1,6 +1,9 @@
 from django.core.management.base import BaseCommand
 import redis
 import time
+import json
+from django.db import transaction
+from core_ledger.models import LedgerTransaction , Portfolio, TransactionType
 
 class Command(BaseCommand):
     help = "Custom Daemon for registering trades in postgres"
@@ -20,13 +23,21 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"Starting Streaming consumer loop"))
         while True:
             try:
-
-                executed_trades = redis_server.xreadgroup(groupname=group_name,consumername=worker_name, streams={stream_name:'>'},block=3000)
+                executed_trades = redis_server.xreadgroup(groupname=group_name,consumername=worker_name, streams={stream_name:'0'},block=3000)
                 if executed_trades:
                     for stream_key,messages in executed_trades:
-                        for ticker , data in messages:
-                            print(f"{ticker} with data {data}")
-                time.sleep(0.1)
+                        print(f"{stream_key} is stream key with message below")
+                        for id , data in messages:
+                            transaction_data = json.loads(data['data'])    
+                            # print(f"{ticker} with quantity {data['data']['quantity']} with price {data['data']['price']}")
+                            self.stdout.write(self.style.SUCCESS(f"Received Trade with ID {id} | ticker {transaction_data['ticker']}"))  
+
+                # @transaction.atomic
+                # def updateLedger(self):
+                #     LedgerTransaction.portfolio = transaction_data.portfolio
+
+
+                time.sleep(30)
 
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"error : {e}"))
