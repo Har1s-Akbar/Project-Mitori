@@ -33,7 +33,7 @@ class MyUserManager(BaseUserManager):
 
 # Create your models here.
 class MyUser(PermissionsMixin, AbstractBaseUser):
-    uuid = models.UUIDField(primary_key = True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(primary_key = True, default=uuid.uuid4, editable=False)
     email = models.EmailField(verbose_name='email address', max_length=255, unique=True)
     date_of_birth = models.DateField()
     full_name = models.CharField(max_length=255)
