@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel, Field
+import uuid
 import uvicorn
 from core.models import Side, Order
 from core.engine import OrderBook
@@ -34,10 +35,13 @@ MARKET ={
 }
 
 class OrderReq(BaseModel):
+    order_id :uuid.UUID = Field(default_factory=uuid.uuid4) 
     ticker:str = Field(min_length=1, max_length=10, title="Ticker", description="Ticker is required", strict=True)
     side:Side = Field(title="side" , description="Side is required")
     price:float = Field(ge=1, lt=1000000000.0, allow_inf_nan=False, strict=True)
     number_of_shares:int = Field(ge=1, lt=2000, allow_inf_nan=False, strict=True)
+    order_owner_id :uuid.UUID | None  = None
+
 
 @app.post("/order")
 async def place_order(order:OrderReq, 
@@ -51,8 +55,13 @@ async def place_order(order:OrderReq,
         ticker =  order.ticker,
         side = order.side,
         price = order.price,
-        number_of_shares = order.number_of_shares
+        number_of_shares = order.number_of_shares,
+        order_owner_id = uuid.UUID(current_user.user_id),
+        order_id = order.order_id,
     )
+
+    print(new_order.order_id )
+    print(new_order.order_owner_id)
 
     target_book.add_order(new_order)
     executed_trades = target_book.execute()

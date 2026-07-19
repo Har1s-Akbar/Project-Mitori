@@ -11,11 +11,11 @@ class OrderBook():
 
     def add_order(self, order:Order):
         if(order.side == Side.SELL):
-            sorted_tuple = (order.price, order.date_time,order.id, order)
+            sorted_tuple = (order.price, order.date_time,order.order_id, order)
             heapq.heappush(self.ask, sorted_tuple)
             # self.bids.append[self]
         if(order.side == Side.BUY):
-            sorted_tuple = (-1*(order.price), order.date_time,order.id, order)
+            sorted_tuple = (-1*(order.price), order.date_time,order.order_id, order)
             heapq.heappush( self.bid,sorted_tuple)
 
     def execute(self):

@@ -20,16 +20,16 @@ async def is_user_Authenticated(credentials:Annotated[HTTPAuthorizationCredentia
     try:
         payload = jwt.decode(token, os.getenv('JWT_SECRET_KEY'), os.getenv('ALGORITHM'))
 
-        user_id : str = payload.get('user_id')
-        kyc_verified :bool = payload.get('is_kyc_verified')
+        user_id_from_req : str = payload.get('user_id')
+        kyc_verified_from_req :bool = payload.get('is_kyc_verified')
 
-        if user_id is None:
+        if user_id_from_req is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                                 detail="Can not proceed : user id not found")
-        if kyc_verified is False:
+        if kyc_verified_from_req is False:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                                 detail="Kyc not completed : can not trade")
-
+        return AuthenticatedUser(user_id=user_id_from_req, kyc_verified=kyc_verified_from_req)
     except jwt.ExpiredSignatureError as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Referesh your login",
