@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel, Field
 import uuid
+from decimal import Decimal
 import uvicorn
 from core.models import Side, Order
 from core.engine import OrderBook
@@ -38,7 +39,7 @@ class OrderReq(BaseModel):
     order_id :uuid.UUID = Field(default_factory=uuid.uuid4) 
     ticker:str = Field(min_length=1, max_length=10, title="Ticker", description="Ticker is required", strict=True)
     side:Side = Field(title="side" , description="Side is required")
-    price:float = Field(ge=1, lt=1000000000.0, allow_inf_nan=False, strict=True)
+    price:Decimal = Field(max_digits=15, decimal_places=2, gt=0, lt=100000000000000)
     number_of_shares:int = Field(ge=1, lt=2000, allow_inf_nan=False, strict=True)
     order_owner_id :uuid.UUID | None  = None
 
@@ -71,7 +72,7 @@ async def place_order(order:OrderReq,
             trade_dict = dataclasses.asdict(trade)
             trade_data = {
                 "ticker" : order.ticker,
-                "data": json.dumps(trade_dict)
+                "data": json.dumps(trade_dict, default=str)
             }
             await redis_client.xadd(
                 name="executed_trades_stream",

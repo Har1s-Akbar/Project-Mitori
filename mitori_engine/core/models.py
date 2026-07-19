@@ -12,7 +12,7 @@ class Side(str,Enum):
 class Order():
     ticker:str
     side:Side
-    price:float
+    price:Decimal
     number_of_shares:int
     order_owner_id : uuid.UUID
     date_time:str = field(default_factory=lambda: str(datetime.now()))
@@ -27,8 +27,8 @@ class Order():
 class Trade():
     ticker:str
     quantity:int
-    price:float
-    buyer_id:str
-    seller_id:str
+    price:Decimal
+    buyer_id :uuid.UUID
+    seller_id : uuid.UUID
     date_time:str = field(default_factory=lambda:str(datetime.now()))
-    id:uuid.UUID=field(default_factory=lambda:uuid.uuid4())
+    order_id:uuid.UUID=field(default_factory=lambda:uuid.uuid4())

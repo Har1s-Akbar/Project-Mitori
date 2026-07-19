@@ -29,7 +29,7 @@ class OrderBook():
                 transactioning_shares = min(best_bid.number_of_shares, best_ask.number_of_shares)
                 best_ask.number_of_shares = best_ask.number_of_shares-transactioning_shares 
                 best_bid.number_of_shares = best_bid.number_of_shares-transactioning_shares
-            trades_executed.append(Trade(self.ticker,transactioning_shares,best_ask.price ,best_bid.id,best_ask.id))
+                trades_executed.append(Trade(self.ticker,transactioning_shares,best_ask.price ,best_bid.order_owner_id,best_ask.order_owner_id))
 
             if best_ask.is_filled:
                 heapq.heappop(self.ask)
