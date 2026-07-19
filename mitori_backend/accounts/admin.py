@@ -13,7 +13,7 @@ class CustomAdmin(UserAdmin):
     search_fields =['email']
 
     fieldsets =(
-        ('login Credentials', {'fields':('email', 'password')}),
+        ('login Credentials', {'fields':('email', 'password','date_of_birth','full_name' ,'is_kyc_verified')}),
         ('permissions',{'fields':('is_staff', 'is_active','is_superuser')})
     )
 
