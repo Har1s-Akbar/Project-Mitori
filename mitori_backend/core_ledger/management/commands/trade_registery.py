@@ -18,7 +18,7 @@ class Command(BaseCommand):
 
         try:
             redis_server.xgroup_create(name=stream_name,groupname=group_name,id=0,mkstream=False)
-            self.stdout(self.style.SUCCESS(f"Created with consumer group {group_name}"))
+            self.stdout.write(self.style.SUCCESS(f"Created with consumer group {group_name}"))
         except redis.exceptions.ResponseError as e:
             if "BUSYGROUP Consumer Group name already exists" not in str(e):
                 raise e
@@ -69,7 +69,9 @@ class Command(BaseCommand):
                                     print(f"Order ${id} processed and added to database properly") 
                             except (utils.OperationalError, LedgerTransaction.DoesNotExist) as e:
                                 self.stdout.write(self.style.ERROR("Settelment failed because {e}"))
-                time.sleep(30)
+
+                                # I still have to write XACK
+                time.sleep(0.1)
 
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"error : {e}"))
