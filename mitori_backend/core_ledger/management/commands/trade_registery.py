@@ -4,6 +4,7 @@ import time
 import json
 from django.db import transaction, utils
 from core_ledger.models import LedgerTransaction , Portfolio, TransactionType,Status
+from decimal import Decimal
 
 class Command(BaseCommand):
     help = "Custom Daemon for registering trades in postgres"
@@ -24,19 +25,33 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"Starting Streaming consumer loop"))
         while True:
             try:
-                executed_trades = redis_server.xreadgroup(groupname=group_name,consumername=worker_name, streams={stream_name:'0'},block=3000)
+                executed_trades = redis_server.xreadgroup(groupname=group_name,consumername=worker_name, streams={stream_name:'>'},block=3000)
                 if executed_trades:
                     for stream_key,messages in executed_trades:
                         print(f"{stream_key} is stream key with message below")
                         for id , data in messages:
-                            transaction_data = json.loads(data['data'])    
+                            transaction_data = json.loads(data['data'])  
+                            price_str = transaction_data['price']
+                            price =   Decimal(price_str)
+                            quantity_str = transaction_data['quantity']
+                            quantity = Decimal(quantity_str)
+                            total = quantity* price
                             # print(f"{ticker} with quantity {data['data']['quantity']} with price {data['data']['price']}")
                             self.stdout.write(self.style.SUCCESS(f"Received Trade with ID {id} | ticker {transaction_data['ticker']}"))  
 
                             try:
                                 with transaction.atomic():
 
-                                    LedgerTransaction.objects.create(portfolio = transaction_data['buyer_id'],
+                                    buyer_portfolio = Portfolio.objects.select_for_update(nowait=True).get(user_id=transaction_data['buyer_id'])
+                                    seller_portfolio = Portfolio.objects.select_for_update(nowait=True).get(user_id=transaction_data['seller_id'])
+
+                                    # total = transaction_data['price']*transaction_data['quantity']
+                                    buyer_portfolio.cash_balance -= total
+                                    # print(buyer_portfolio.cash_balance)
+                                    buyer_portfolio.save()
+                                    seller_portfolio.cash_balance += total
+                                    seller_portfolio.save()
+                                    LedgerTransaction.objects.create(portfolio = buyer_portfolio,
                                                                     transaction_type=TransactionType.BUY,
                                                                     amount=transaction_data['price'],
                                                                     quantity=transaction_data['quantity'],
@@ -44,7 +59,7 @@ class Command(BaseCommand):
                                                                     asset_symbol=transaction_data['ticker']
                                                                     )
                                     
-                                    LedgerTransaction.objects.create(portfolio = transaction_data['seller_id'],
+                                    LedgerTransaction.objects.create(portfolio = seller_portfolio,
                                                                     transaction_type=TransactionType.SELL,
                                                                     amount=transaction_data['price'],
                                                                     quantity=transaction_data['quantity'],
