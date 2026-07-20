@@ -2,8 +2,8 @@ from django.core.management.base import BaseCommand
 import redis
 import time
 import json
-from django.db import transaction
-from core_ledger.models import LedgerTransaction , Portfolio, TransactionType
+from django.db import transaction, utils
+from core_ledger.models import LedgerTransaction , Portfolio, TransactionType,Status
 
 class Command(BaseCommand):
     help = "Custom Daemon for registering trades in postgres"
@@ -14,6 +14,7 @@ class Command(BaseCommand):
         stream_name = "executed_trades_stream"
         group_name = "django_workers"
         worker_name = "django_database_worker"
+
         try:
             redis_server.xgroup_create(name=stream_name,groupname=group_name,id=0,mkstream=False)
             self.stdout(self.style.SUCCESS(f"Created with consumer group {group_name}"))
@@ -32,11 +33,27 @@ class Command(BaseCommand):
                             # print(f"{ticker} with quantity {data['data']['quantity']} with price {data['data']['price']}")
                             self.stdout.write(self.style.SUCCESS(f"Received Trade with ID {id} | ticker {transaction_data['ticker']}"))  
 
-                # @transaction.atomic
-                # def updateLedger(self):
-                #     LedgerTransaction.portfolio = transaction_data.portfolio
+                            try:
+                                with transaction.atomic():
 
-
+                                    LedgerTransaction.objects.create(portfolio = transaction_data['buyer_id'],
+                                                                    transaction_type=TransactionType.BUY,
+                                                                    amount=transaction_data['price'],
+                                                                    quantity=transaction_data['quantity'],
+                                                                    status=Status.COMPLETED,
+                                                                    asset_symbol=transaction_data['ticker']
+                                                                    )
+                                    
+                                    LedgerTransaction.objects.create(portfolio = transaction_data['seller_id'],
+                                                                    transaction_type=TransactionType.SELL,
+                                                                    amount=transaction_data['price'],
+                                                                    quantity=transaction_data['quantity'],
+                                                                    status=Status.COMPLETED,
+                                                                    asset_symbol=transaction_data['ticker']
+                                                                    )
+                                    print(f"Order ${id} processed and added to database properly") 
+                            except (utils.OperationalError, LedgerTransaction.DoesNotExist) as e:
+                                self.stdout.write(self.style.ERROR("Settelment failed because {e}"))
                 time.sleep(30)
 
             except Exception as e:
