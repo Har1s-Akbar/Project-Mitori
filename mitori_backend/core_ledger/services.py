@@ -13,7 +13,12 @@ def redis_positions_portfolio_service(id:str):
 
         positions_key = f"cache:positions:{id}"
         with redis_client.pipeline() as pipeline:
-            pipeline.set(portfolio_key, str(user_portfolio.cash_balance))
+            pipeline.delete(portfolio_key)
+            portfolio_redis_dict ={
+                'available_cash':str(user_portfolio.cash_balance),
+                'locked_balance':0
+            }
+            pipeline.hset(portfolio_key, mapping=portfolio_redis_dict)
 
             pipeline.delete(positions_key)
 
