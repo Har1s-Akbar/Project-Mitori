@@ -1,17 +1,17 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends
-from pydantic import BaseModel, Field
+from pydantic import Field
 import uuid
-from decimal import Decimal
 import uvicorn
-from core.models import Side, Order
-from core.engine import OrderBook
 import redis.asyncio as redis
 from infrastructure.client import create_redis_pool
 from api.security import AuthenticatedUser , is_user_Authenticated
 from api.dependencies import get_redis
 import json
 import dataclasses
+from api.have_funds import have_funds
+from schemas.schema import MARKET, OrderReq
+from core.models import Order
 
 @asynccontextmanager
 async def lifespan(app:FastAPI):
@@ -29,22 +29,8 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-MARKET ={
-    "APP": OrderBook("APP"),
-    "TSLA": OrderBook("TSLA"),
-    "AUX":OrderBook("AUX")
-}
 
-class OrderReq(BaseModel):
-    order_id :uuid.UUID = Field(default_factory=uuid.uuid4) 
-    ticker:str = Field(min_length=1, max_length=10, title="Ticker", description="Ticker is required", strict=True)
-    side:Side = Field(title="side" , description="Side is required")
-    price:Decimal = Field(max_digits=15, decimal_places=2, gt=0, lt=100000000000000)
-    number_of_shares:int = Field(ge=1, lt=2000, allow_inf_nan=False, strict=True)
-    order_owner_id :uuid.UUID | None  = None
-
-
-@app.post("/order")
+@app.post("/order", dependencies=[Depends(have_funds)])
 async def place_order(order:OrderReq, 
                       redis_client : redis.Redis = Depends(get_redis)
                       ,current_user : AuthenticatedUser=Depends(is_user_Authenticated)):
@@ -58,11 +44,10 @@ async def place_order(order:OrderReq,
         price = order.price,
         number_of_shares = order.number_of_shares,
         order_owner_id = uuid.UUID(current_user.user_id),
-        order_id = order.order_id,
     )
 
-    print(new_order.order_id )
-    print(new_order.order_owner_id)
+    print(f"new order id {new_order.order_id}" )
+    print(f" owner id is {new_order.order_owner_id}")
 
     target_book.add_order(new_order)
     executed_trades = target_book.execute()

@@ -30,6 +30,7 @@ async def is_user_Authenticated(credentials:Annotated[HTTPAuthorizationCredentia
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                                 detail="Kyc not completed : can not trade")
         return AuthenticatedUser(user_id=user_id_from_req, kyc_verified=kyc_verified_from_req)
+
     except jwt.ExpiredSignatureError as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Referesh your login",
@@ -38,3 +39,4 @@ async def is_user_Authenticated(credentials:Annotated[HTTPAuthorizationCredentia
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                             detail="Can not validate credentials : Provide proper credentials",
                             headers={"WWW-Authenticate":"Bearer"})
+    
