@@ -4,11 +4,27 @@ from core_ledger.models import Portfolio, Position
 redis_client = redis.Redis(host='localhost',port=6379,db=0,decode_responses=True)
 
 def redis_positions_portfolio_service(id:str):
-    user_portfolio = Portfolio.objects.get(user_id=id)
+    try:
+        user_portfolio = Portfolio.objects.get(user_id=id)
 
-    user_position = Position.objects.get(user_portfolio.id)
+        user_position = Position.objects.filter(portfolio_id=user_portfolio.id, quantity__gt=0)
 
-    with redis_client.pipeline() as pipeline:
-        pipeline.set('cache:portfolio:{id}:', user_portfolio.cash_balance)
+        portfolio_key = f"cache:portfolio:{id}"
 
-        pipeline.delete('cache:position:{id}')
+        positions_key = f"cache:positions:{id}"
+        with redis_client.pipeline() as pipeline:
+            pipeline.set(portfolio_key, str(user_portfolio.cash_balance))
+
+            pipeline.delete(positions_key)
+
+            if user_position.exists():
+                position_dict = {}
+                for pos in user_position:
+                    position_dict[pos.asset_symbol] = str(pos.quantity)
+                
+                pipeline.hset(positions_key, mapping=position_dict)
+
+            pipeline.execute()
+            print("executed properly")
+    except Exception as e:
+        print(e)
