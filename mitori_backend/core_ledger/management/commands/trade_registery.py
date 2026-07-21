@@ -17,7 +17,7 @@ class Command(BaseCommand):
         worker_name = "django_database_worker"
 
         try:
-            redis_server.xgroup_create(name=stream_name,groupname=group_name,id=0,mkstream=False)
+            redis_server.xgroup_create(name=stream_name,groupname=group_name,id=0,mkstream=True)
             self.stdout.write(self.style.SUCCESS(f"Created with consumer group {group_name}"))
         except redis.exceptions.ResponseError as e:
             if "BUSYGROUP Consumer Group name already exists" not in str(e):
@@ -66,11 +66,10 @@ class Command(BaseCommand):
                                                                     status=Status.COMPLETED,
                                                                     asset_symbol=transaction_data['ticker']
                                                                     )
-                                    print(f"Order ${id} processed and added to database properly") 
+                                    redis_server.xack(stream_name, group_name,id)
+                                    self.stdout.write(self.style.SUCCESS(f"order {id} properly setteled in database"))
                             except (utils.OperationalError, LedgerTransaction.DoesNotExist) as e:
-                                self.stdout.write(self.style.ERROR("Settelment failed because {e}"))
-
-                                # I still have to write XACK
+                                self.stdout.write(self.style.ERROR("Settelment failed because {e}")) 
                 time.sleep(0.1)
 
             except Exception as e:
