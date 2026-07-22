@@ -27,7 +27,8 @@ class Order():
 class Trade():
     ticker:str
     quantity:int
-    price:Decimal
+    price_setteled_at:Decimal
+    price_locked_by_user:Decimal
     buyer_id :uuid.UUID
     seller_id : uuid.UUID
     date_time:str = field(default_factory=lambda:str(datetime.now()))

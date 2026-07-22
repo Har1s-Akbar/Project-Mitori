@@ -26,6 +26,7 @@ def redis_positions_portfolio_service(id:str):
                 position_dict = {}
                 for pos in user_position:
                     position_dict[pos.asset_symbol] = str(pos.quantity)
+                    position_dict[f'locked_{pos.asset_symbol}'] = 0
                 
                 pipeline.hset(positions_key, mapping=position_dict)
 
