@@ -62,14 +62,18 @@ class Command(BaseCommand):
                                     seller_portfolio.cash_balance += total
                                     seller_portfolio.save()
 
+                                    seller_position = Position.objects.select_for_update(nowait=True).get(portfolio=seller_portfolio, asset_symbol = transaction_data['ticker'])
+                                    seller_position.quantity -= quantity
+                                    seller_position.save()
+
                                     try:
-                                        buyer_position = Position.objects.select_for_update(nowait=True).get(Portfolio=buyer_portfolio,asset_symbol =transaction_data['ticker'])
+                                        buyer_position = Position.objects.select_for_update(nowait=True).get(portfolio=buyer_portfolio,asset_symbol =transaction_data['ticker'])
                                         buyer_position.quantity += quantity
                                         buyer_position.average_entry_price = (buyer_position.average_entry_price + price_locked)/2
                                         buyer_position.save()
                                     except Position.DoesNotExist:
                                         Position.objects.create(
-                                            Portfolio=buyer_portfolio,
+                                            portfolio=buyer_portfolio,
                                             asset_symbol=transaction_data['ticker'],
                                             quantity=quantity,
                                             average_entry_price=price_locked

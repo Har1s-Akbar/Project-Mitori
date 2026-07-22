@@ -71,7 +71,7 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
-    'ALGORITHM': 'HS256',
+    'ALGORITHM': os.getenv('ALGORITHM'),
     'SIGNING_KEY': os.getenv('JWT_SECRET_KEY'),
   # ...
 }

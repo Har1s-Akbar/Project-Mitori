@@ -18,7 +18,7 @@ class AuthenticatedUser(BaseModel):
 async def is_user_Authenticated(credentials:Annotated[HTTPAuthorizationCredentials,Depends(security)])->AuthenticatedUser:
     token = credentials.credentials
     try:
-        payload = jwt.decode(token, os.getenv('JWT_SECRET_KEY'), os.getenv('ALGORITHM'))
+        payload = jwt.decode(token, os.getenv('JWT_SECRET_KEY'), algorithms=[os.getenv('ALGORITHM')])
 
         user_id_from_req : str = payload.get('user_id')
         kyc_verified_from_req :bool = payload.get('is_kyc_verified')
