@@ -34,3 +34,30 @@ def redis_positions_portfolio_service(id:str):
             print("executed properly")
     except Exception as e:
         print(e)
+
+def settle_cache(transaction_data, redis_server):
+    ticker = transaction_data['ticker']
+    seller_id = transaction_data['seller_id']
+    seller_cache = f"cache:positions:{seller_id}"
+    seller_cash_cache = f"cache:portfolio:{seller_id}"
+
+    buyer_id = transaction_data['buyer_id']
+    buyer_cache = f"cache:portfolio:{buyer_id}"
+    buyer_position_cache = f"cache:positions:{buyer_id}"
+
+    quantity = int(transaction_data['quantity'])
+    price_locked = float(transaction_data['price_locked_by_user'])
+    price_settled = float(transaction_data['price_setteled_at'])
+
+    total_locked = price_locked * quantity
+    total_settled = price_settled * quantity
+    funds_remaining = total_locked - total_settled
+
+    redis_server.hincrby(seller_cache, f"locked_{ticker}", -quantity)
+    redis_server.hincrbyfloat(seller_cash_cache, 'available_cash', total_settled)
+
+    redis_server.hincrbyfloat(buyer_cache, 'locked_balance', -total_locked)
+    redis_server.hincrby(buyer_position_cache, ticker, quantity)
+
+    if funds_remaining > 0:
+        redis_server.hincrbyfloat(buyer_cache, 'available_cash', funds_remaining)

@@ -5,6 +5,7 @@ import json
 from django.db import transaction, utils
 from core_ledger.models import LedgerTransaction , Portfolio, TransactionType,Status
 from decimal import Decimal
+from services import settle_cache
 
 class Command(BaseCommand):
     help = "Custom Daemon for registering trades in postgres"
@@ -34,8 +35,19 @@ class Command(BaseCommand):
                             transaction_data = json.loads(data['data'])  
                             price_str = transaction_data['price_setteled_at']
                             price =   Decimal(price_str)
+                            
+                            
                             quantity_str = transaction_data['quantity']
                             quantity = Decimal(quantity_str)
+
+
+                            price_locked_str = transaction_data['price_locked_by_user']
+                            price_locked = Decimal(price_locked_str)
+                            tota_price_locked = quantity*price_locked
+
+                            funds_remaining = price_locked - price 
+                            
+                            
                             total = quantity* price
                             # print(f"{ticker} with quantity {data['data']['quantity']} with price {data['data']['price']}")
                             self.stdout.write(self.style.SUCCESS(f"Received Trade with ID {id} | ticker {transaction_data['ticker']}"))  
@@ -71,11 +83,15 @@ class Command(BaseCommand):
                                                                     asset_symbol=transaction_data['ticker']
                                                                     )
                                     transaction.on_commit(
-                                        lambda message_id = id :redis_server.xack(stream_name, group_name,id)
+                                        lambda message_id = id :redis_server.xack(stream_name, group_name,id),
+                                        lambda data=transaction_data:settle_cache(data, redis_server)
                                     )
                                     transaction.on_commit(
+                                        
                                         lambda message_id = id :self.stdout.write(self.style.SUCCESS(f"order {id} properly setteled in database"))
+
                                     )
+                                    
                             except (utils.OperationalError, LedgerTransaction.DoesNotExist) as e:
                                 self.stdout.write(self.style.ERROR("Settelment failed because {e}")) 
                 time.sleep(0.1)
