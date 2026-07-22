@@ -31,7 +31,6 @@ def redis_positions_portfolio_service(id:str):
                 pipeline.hset(positions_key, mapping=position_dict)
 
             pipeline.execute()
-            print("executed properly")
     except Exception as e:
         print(e)
 
@@ -53,11 +52,11 @@ def settle_cache(transaction_data, redis_server):
     total_settled = price_settled * quantity
     funds_remaining = total_locked - total_settled
 
-    redis_server.hincrby(seller_cache, f"locked_{ticker}", -quantity)
+    redis_server.hincrbyfloat(seller_cache, f"locked_{ticker}", -quantity)
     redis_server.hincrbyfloat(seller_cash_cache, 'available_cash', total_settled)
 
     redis_server.hincrbyfloat(buyer_cache, 'locked_balance', -total_locked)
-    redis_server.hincrby(buyer_position_cache, ticker, quantity)
+    redis_server.hincrbyfloat(buyer_position_cache, ticker, quantity)
 
     if funds_remaining > 0:
         redis_server.hincrbyfloat(buyer_cache, 'available_cash', funds_remaining)

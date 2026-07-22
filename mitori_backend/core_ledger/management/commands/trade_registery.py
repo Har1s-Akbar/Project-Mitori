@@ -3,7 +3,7 @@ import redis
 import time
 import json
 from django.db import transaction, utils
-from core_ledger.models import LedgerTransaction , Portfolio, TransactionType,Status
+from core_ledger.models import LedgerTransaction , Portfolio, TransactionType,Status, Position
 from decimal import Decimal
 from core_ledger.services import settle_cache
 
@@ -43,9 +43,6 @@ class Command(BaseCommand):
 
                             price_locked_str = transaction_data['price_locked_by_user']
                             price_locked = Decimal(price_locked_str)
-                            tota_price_locked = quantity*price_locked
-
-                            funds_remaining = price_locked - price 
                             
                             
                             total = quantity* price
@@ -64,6 +61,19 @@ class Command(BaseCommand):
                                     buyer_portfolio.save()
                                     seller_portfolio.cash_balance += total
                                     seller_portfolio.save()
+
+                                    try:
+                                        buyer_position = Position.objects.select_for_update(nowait=True).get(Portfolio=buyer_portfolio,asset_symbol =transaction_data['ticker'])
+                                        buyer_position.quantity += quantity
+                                        buyer_position.average_entry_price = (buyer_position.average_entry_price + price_locked)/2
+                                        buyer_position.save()
+                                    except Position.DoesNotExist:
+                                        Position.objects.create(
+                                            Portfolio=buyer_portfolio,
+                                            asset_symbol=transaction_data['ticker'],
+                                            quantity=quantity,
+                                            average_entry_price=price_locked
+                                        )
                                     LedgerTransaction.objects.create(portfolio = buyer_portfolio,
                                                                     transaction_type=TransactionType.BUY,
                                                                     price_setteled_at=transaction_data['price_setteled_at'],
