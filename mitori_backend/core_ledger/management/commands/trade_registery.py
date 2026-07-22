@@ -28,10 +28,11 @@ class Command(BaseCommand):
                 executed_trades = redis_server.xreadgroup(groupname=group_name,consumername=worker_name, streams={stream_name:'>'},block=3000)
                 if executed_trades:
                     for stream_key,messages in executed_trades:
+                        print(messages)
                         print(f"{stream_key} is stream key with message below")
                         for id , data in messages:
                             transaction_data = json.loads(data['data'])  
-                            price_str = transaction_data['price']
+                            price_str = transaction_data['price_setteled_at']
                             price =   Decimal(price_str)
                             quantity_str = transaction_data['quantity']
                             quantity = Decimal(quantity_str)
@@ -53,7 +54,9 @@ class Command(BaseCommand):
                                     seller_portfolio.save()
                                     LedgerTransaction.objects.create(portfolio = buyer_portfolio,
                                                                     transaction_type=TransactionType.BUY,
-                                                                    amount=transaction_data['price'],
+                                                                    price_setteled_at=transaction_data['price_setteled_at'],
+                                                                    
+                                                                    price_locked_by_user = transaction_data['price_locked_by_user'],
                                                                     quantity=transaction_data['quantity'],
                                                                     status=Status.COMPLETED,
                                                                     asset_symbol=transaction_data['ticker']
@@ -61,13 +64,18 @@ class Command(BaseCommand):
                                     
                                     LedgerTransaction.objects.create(portfolio = seller_portfolio,
                                                                     transaction_type=TransactionType.SELL,
-                                                                    amount=transaction_data['price'],
+                                                                    price_setteled_at=transaction_data['price_setteled_at'],
+                                                                    price_locked_by_user = transaction_data['price_locked_by_user'],
                                                                     quantity=transaction_data['quantity'],
                                                                     status=Status.COMPLETED,
                                                                     asset_symbol=transaction_data['ticker']
                                                                     )
-                                    redis_server.xack(stream_name, group_name,id)
-                                    self.stdout.write(self.style.SUCCESS(f"order {id} properly setteled in database"))
+                                    transaction.on_commit(
+                                        lambda message_id = id :redis_server.xack(stream_name, group_name,id)
+                                    )
+                                    transaction.on_commit(
+                                        lambda message_id = id :self.stdout.write(self.style.SUCCESS(f"order {id} properly setteled in database"))
+                                    )
                             except (utils.OperationalError, LedgerTransaction.DoesNotExist) as e:
                                 self.stdout.write(self.style.ERROR("Settelment failed because {e}")) 
                 time.sleep(0.1)
