@@ -5,7 +5,7 @@ import json
 from django.db import transaction, utils
 from core_ledger.models import LedgerTransaction , Portfolio, TransactionType,Status
 from decimal import Decimal
-from services import settle_cache
+from core_ledger.services import settle_cache
 
 class Command(BaseCommand):
     help = "Custom Daemon for registering trades in postgres"
@@ -83,7 +83,9 @@ class Command(BaseCommand):
                                                                     asset_symbol=transaction_data['ticker']
                                                                     )
                                     transaction.on_commit(
-                                        lambda message_id = id :redis_server.xack(stream_name, group_name,id),
+                                        lambda message_id = id :redis_server.xack(stream_name, group_name,id)
+                                    )
+                                    transaction.on_commit(
                                         lambda data=transaction_data:settle_cache(data, redis_server)
                                     )
                                     transaction.on_commit(

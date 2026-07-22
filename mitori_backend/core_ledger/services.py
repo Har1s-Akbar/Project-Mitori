@@ -61,3 +61,5 @@ def settle_cache(transaction_data, redis_server):
 
     if funds_remaining > 0:
         redis_server.hincrbyfloat(buyer_cache, 'available_cash', funds_remaining)
+
+    print('finished running')

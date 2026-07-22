@@ -42,7 +42,7 @@ async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Auth
                         await pipeline.execute()
                         break
                 if order_side == "sell":
-                    await pipeline.watch(f'cache:position:{order_user_id}')
+                    await pipeline.watch(f'cache:positions:{order_user_id}')
                     available_shares = await pipeline.hget(f'cache:positions:{order_user_id}', order_ticker)
                     locked_shares = await pipeline.hget(f'cache:positions:{order_user_id}', f'locked_{order_ticker}')
 
@@ -59,7 +59,7 @@ async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Auth
                             f'locked_{order_ticker}' : safe_locked_shares, 
                         }
                         pipeline.multi()
-                        pipeline.hset(f'cache:position:{order_user_id}', mapping=updates)
+                        pipeline.hset(f'cache:positions:{order_user_id}', mapping=updates)
                         await pipeline.execute()
                         break
             except exp.WatchError:
