@@ -203,3 +203,52 @@ In the main we implement
 * [ ] Idempotency Protection
 * [ ] Write ahead log
 * [ ] Cryptographic Ownership for the order
+
+### Streamin Bridge (Fire and persist)
+Now we introduce Redis not because it is a fancy software that every production grade application uses but because there is a certain need that we have for redis in our decoupled system.
+You might ask what that need might be why did i chose redis stream instead of standard HTTP call between django and fastapi
+**Need for Redis**
+We need the matched order to be delivered to our django system so that our django can handle that data and update database as well as perofrm services as well.
+You might say why redis and why not standard HTTP Request.
+* Standard HTTP request breaks the system and purpose of high frequency , standard HTTP would make fastapi pause and divert from it's pupose which is only matching order and validating the user  before the allowing the user to trade.
+* Every HTTP request needs a response , if  fastAPI talks with django directly , it will require the response of Djnago before severing the request and we need django to take the data and update the database , database operations are time expensive. This will make our HTTP request extremely slow and FastApi will miss orders which is the whole point for us choosing the redis stream.
+
+There is another architectural nuance here I could have gone with redis pub/sub but i chose streams which follows the pattern of fire and persist.
+**Pub/Sub**
+Pub/Sub is an architectural structure where there is one publisher and number of services can subscribe to that publisher , and can implement other services based on the action publisher publishes in a channel , but there is a critical flaw that will make our system choke. ***Pub/Sub is fire and forget , it fires the data or action and it is not concerned with the acknowledgement of the subsctriber*** If for some reason our django service is down , instead of retaining the data in stream that data is lost on djangos end. When django service rebots it will not be able to see the traades it missed causing serious disruption in the system.
+
+That made me chose the streams over pub/sub. Which are Fire and persist , until the group that is listening to the specific stream sends an ***ACKX*** redis stream maintains those messages as new for the group.
+
+For the code implementation of redis stream you can check the commits below as well beaware the redis stream is implemented along side jwt bearer token authentication and django custom commands, so you might have to jump around to find what you are really looking for.
+[ First Commit ](https://github.com/Har1s-Akbar/Project-Mitori/commit/ce991985e569dad631f376a8aa7554f381942e8e)
+
+### Implementation
+The way i configuered Redis stream is using a pool of connection. This is also an architectural decision. I chose connection pool over standard connection request of redis is because , In High Frequency systems if fastApi our matching engine stalls for sometime to open  a new connection with fastApi everytime a  new order is matched it would be desasterous because opening a connection and then properly closing it takes too much time. So i configuered the connection pool with the number of ***max_connections=15,*** it will make sure 15 connections are already open and everytime fastapi needs  to push a message into the stream it just grabs a connection connects to it , this saves us considerable of time on our request side.
+Along side it I used the Lifespan to manage the global connection pool so that fastapi starts the connection pool everytime the server starts and also gracefully handles it when it's time to close.
+along side the connection pool and lifespan events i also used depenedency injection so that each request that our ***/order*** route servers has redis.redis instance attached to it.
+
+___Finally the choice of implementing appache kafka was alsso present , but i did not chose that route because , first of all apache kafka is for enterprise applications that are managing millions top hundred-millions data per second plus at this point if i were to implement apache kafka i would be over engineering the project , which is the biggest pifall you want to avoid__
+
+# JWT Implementation
+As i mentioned in the django section before  JWT is something that is for future improvements but when i started building this project I found it the absolutely necessary to implement the jwt auth because of sevaral reasons
+* I need to know if the one who is putting the trade is authorized to do so?
+* What if the person is just trying to corrupt the database? 
+*How will the order be linked if there is not id being passed around from django to fastapi and back to django when it was time for settlement of the data.
+
+These quesstions made me add jwt before proceeding any further and also they influenced other features and security implementations in the project as well.
+
+**Implementation**
+Now as always there were two to three choices for me when it comes to auth
+* Handling auth at Fastapi
+* Handling at Django
+* Hadling auth using third party service
+
+I chose Handling auth at django using djangorestframework-simplejwt, I will tell you the reason for it as well , It was because using fastapi would make me do extra things like
+* Storing auth sessions in django (for that per login i would have to request to django saving the session)
+* Django would have to verufy the data against fastapi everytime a user would put a request
+
+I solved it by managing the auth at django which was easier than expected as i was able to get it running with customized options for token.
+
+You can see the implementation for jwt here 
+[First Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/1033b34218c429f67be6f038027ce83e90bf195f) - [Last Commit] (https://github.com/Har1s-Akbar/Project-Mitori/commit/c52506520e7ae70505bef895a2c76c26e264fd93)
+
