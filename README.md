@@ -9,23 +9,46 @@ Mainly i intend to create a custom build stock trading application, with various
 
 ```mermaid
 graph TD
-    %% Define Nodes
-    Client[(" Next.js Client<br/>(UI)")]
-    FastAPI[" FastAPI Microservice<br/>(Order Book)"]
-    Django[" Django Microservice<br/>(Auth & Ledger)"]
-    DB[(" PostgreSQL<br/>(Immutable State)")]
+    Client["Client<br/>(not yet built)"]
+    Auth["FastAPI: JWT Verify<br/>(security.py)"]
+    Hold["FastAPI: Hold Pattern<br/>WATCH/MULTI/EXEC<br/>(have_funds.py)"]
+    Engine["FastAPI: Matching Engine<br/>Heap-based price-time priority<br/>(core/engine.py)"]
+    Stream[("Redis Stream<br/>XADD fire-and-persist")]
+    Daemon["Django Daemon<br/>XREADGROUP consumer group<br/>(trade_registery.py)"]
+    Lock["Postgres: Pessimistic Lock<br/>select_for_update + atomic()"]
+    DB[("PostgreSQL<br/>LedgerTransaction, Position, Portfolio")]
+    Ack["XACK<br/>(on_commit, after DB success)"]
+    Settle["settle_cache()<br/>reconcile Redis with DB truth"]
+    Cache[("Redis Cache<br/>cache:portfolio:*, cache:positions:*")]
+    Signal["Django Signal<br/>post_save on User<br/>(signals.py)"]
 
-    %% Define Connections
-    Client -- "1. Trading Intents (Buy/Sell)<br/>WebSockets / Async HTTP" --> FastAPI
-    Client -- "2. Read-Only Portfolio Fetch<br/>REST API (JWT/Session)" --> Django
-    FastAPI -- "3. Trade Settlement Commands<br/>Secure Backend Loopback" --> Django
-    Django -- "4. Enforce ACID Constraints<br/>Read / Write" --> DB
+    Client -. "not implemented yet" .-> Auth
+    Auth --> Hold
+    Hold -- "reserve funds/shares" --> Cache
+    Hold --> Engine
+    Engine -- "matched trade" --> Stream
+    Stream --> Daemon
+    Daemon --> Lock
+    Lock -- "write" --> DB
+    Lock -. "success" .-> Ack
+    Ack --> Stream
+    Lock -. "success" .-> Settle
+    Settle -- "release hold, apply settlement" --> Cache
 
-    %% Styling
-    style Client fill:#000000,stroke:#ffffff,stroke-width:2px,color:#ffffff
-    style FastAPI fill:#009688,stroke:#004d40,stroke-width:2px,color:#ffffff
-    style Django fill:#0c4b33,stroke:#000000,stroke-width:2px,color:#ffffff
-    style DB fill:#336791,stroke:#000000,stroke-width:2px,color:#ffffff
+    Signal -. "on user creation" .-> DB
+
+    style Client fill:#333,stroke:#888,stroke-dasharray: 5 5,color:#fff
+    style Auth fill:#009688,stroke:#004d40,color:#fff
+    style Hold fill:#009688,stroke:#004d40,color:#fff
+    style Engine fill:#009688,stroke:#004d40,color:#fff
+    style Stream fill:#b71c1c,stroke:#000,color:#fff
+    style Daemon fill:#0c4b33,stroke:#000,color:#fff
+    style Lock fill:#0c4b33,stroke:#000,color:#fff
+    style DB fill:#336791,stroke:#000,color:#fff
+    style Ack fill:#0c4b33,stroke:#000,color:#fff
+    style Settle fill:#0c4b33,stroke:#000,color:#fff
+    style Cache fill:#b71c1c,stroke:#000,color:#fff
+    style Signal fill:#0c4b33,stroke:#000,color:#fff
 ```
 
 ### Tech stack
@@ -91,11 +114,11 @@ Finally i incorporate these views with the url to make the api endpoints fully f
 
 __One Note : before I wrap this django implementation is there are still several things that are still to be implemeneted , I have just laid the ground work for the project , that will be leveraging several technologies , moving away from cohesive or monolithic structures and dwelling into the decoupled land of architecture, all of the unfinished features will be fully implmented once the flow of the project is somewhat complete__
 
-__That flow is Django -> FastApi -> Nextjs__
+__That flow is Client(Frontend)->Mitori Engine(FastAPI - Validate with Redis Cache ,Lock+match)->Redis Stream->Django Daemon(Custom Manager for trade settelment in database) -> Postgres(the source of ultimate trade history and portfolio) ->Redis Stream__
 
 ### Future Improvements in Django microservice
-* [ ] Solving Race condition
-* [ ] implementing JWT (fixing patch 1.1)
+* [x] Solving Race condition (solved when implementing cache and Custom Management Command for django daemon | it is solved in multiple commits) [First Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/bfa18f4acf73c49252229f8dee6747a4d1448d5f) - [Last Commmit] (https://github.com/Har1s-Akbar/Project-Mitori/commit/ba129131c2ec9f6df374d26bc98f10b9c13dbc6b) 
+* [x] implementing JWT (fixing patch 1.1) [First commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/f69618e2c29c0372cacf15b1b26a53f00b901e01) - [Last commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/c52506520e7ae70505bef895a2c76c26e264fd93)
 * [ ] Implementing Logger
 * [ ] DDOS attack
 * [ ] Testing
