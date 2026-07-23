@@ -117,7 +117,7 @@ __One Note : before I wrap this django implementation is there are still several
 __That flow is Client(Frontend)->Mitori Engine(FastAPI - Validate with Redis Cache ,Lock+match)->Redis Stream->Django Daemon(Custom Manager for trade settelment in database) -> Postgres(the source of ultimate trade history and portfolio) ->Redis Stream__
 
 ### Future Improvements in Django microservice
-* [x] Solving Race condition (solved when implementing cache and Custom Management Command for django daemon | it is solved in multiple commits) [First Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/bfa18f4acf73c49252229f8dee6747a4d1448d5f) - [Last Commmit] (https://github.com/Har1s-Akbar/Project-Mitori/commit/ba129131c2ec9f6df374d26bc98f10b9c13dbc6b) 
+* [x] Solving Race condition (solved when implementing cache and Custom Management Command for django daemon | it is solved in multiple commits) [First Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/bfa18f4acf73c49252229f8dee6747a4d1448d5f) - [Last Commmit](https://github.com/Har1s-Akbar/Project-Mitori/commit/ba129131c2ec9f6df374d26bc98f10b9c13dbc6b) 
 * [x] implementing JWT (fixing patch 1.1) [First commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/f69618e2c29c0372cacf15b1b26a53f00b901e01) - [Last commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/c52506520e7ae70505bef895a2c76c26e264fd93)
 * [ ] Implementing Logger
 * [ ] DDOS attack
@@ -217,7 +217,7 @@ There is another architectural nuance here I could have gone with redis pub/sub 
 **Pub/Sub**
 Pub/Sub is an architectural structure where there is one publisher and number of services can subscribe to that publisher , and can implement other services based on the action publisher publishes in a channel , but there is a critical flaw that will make our system choke. ***Pub/Sub is fire and forget , it fires the data or action and it is not concerned with the acknowledgement of the subsctriber*** If for some reason our django service is down , instead of retaining the data in stream that data is lost on djangos end. When django service rebots it will not be able to see the traades it missed causing serious disruption in the system.
 
-That made me chose the streams over pub/sub. Which are Fire and persist , until the group that is listening to the specific stream sends an ***ACKX*** redis stream maintains those messages as new for the group.
+That made me chose the streams over pub/sub. Which are Fire and persist , until the group that is listening to the specific stream sends an ***XACK*** redis stream maintains those messages as new for the group.
 
 For the code implementation of redis stream you can check the commits below as well beaware the redis stream is implemented along side jwt bearer token authentication and django custom commands, so you might have to jump around to find what you are really looking for.
 [ First Commit ](https://github.com/Har1s-Akbar/Project-Mitori/commit/ce991985e569dad631f376a8aa7554f381942e8e)
@@ -250,5 +250,5 @@ I chose Handling auth at django using djangorestframework-simplejwt, I will tell
 I solved it by managing the auth at django which was easier than expected as i was able to get it running with customized options for token.
 
 You can see the implementation for jwt here 
-[First Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/1033b34218c429f67be6f038027ce83e90bf195f) - [Last Commit] (https://github.com/Har1s-Akbar/Project-Mitori/commit/c52506520e7ae70505bef895a2c76c26e264fd93)
+[First Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/1033b34218c429f67be6f038027ce83e90bf195f) - [Last Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/c52506520e7ae70505bef895a2c76c26e264fd93)
 
