@@ -1,10 +1,10 @@
 # Project-Mitori
 A microservice-based stock brokerage platform and order book analytics engine
 
-### What is this?
+## What is this?
 Project Mitori is a custom-built stock trading platform I am developing from scratch. The goal is to learn how real financial systems work under the hood. 
 
-### Bird's Eye View of the project
+## Bird's Eye View of the project
 Mainly i intend to create a custom build stock trading application, with various technologies and architectural approaches , observing trade-offs and critically analyzing the choices of what create a real enterprise application.
 
 ```mermaid
@@ -51,21 +51,19 @@ graph TD
     style Signal fill:#0c4b33,stroke:#000,color:#fff
 ```
 
-### Tech stack
-
-### Tech stack
+## Tech stack
 * Django for auth and maintaining the certain data in the database which will be postgresql
 * FastApi for simulating the real order book and matching orders in real time.
 * Nextjs for the frontend and for polished Ui
 __That is the major stack for this application__
-### Architectural Approach
+## Architectural Approach
 * Architectural approach for this project Mitori would be maintaing the modularity of the technologies leveraging the best pieces of every framework weighing trade offs and chosing the best optimal solution that mimics an enterprise application.
 __In short a polyglot architecture which is highly decoupled , leveraging the solidity of Django , blazing fastness of FastApi and Rendering techniques of Nextjs__
 
-### Expected Outcome
+# Expected Outcome
 * What i am aiming for at the end of this project is that I not only implement and levitate this application to production grade enterprise application but also derive some insights about the thoughts and questions i am having and that question is 
 __Is leveraging c++ in such a decoupled polyglot architecture going to decrease the latency of the matched orders in the fastapi or is it not worth the complexity?__
-### Network vs Execution Paradox
+## Network vs Execution Paradox
 Though it is clear that c++ can match order book in nanosecond because of it's speed and compatibility with the machine level the main point of observation would be cross-process communication overhead, will it consume more time than the raw python script? 
 
 This will surely be answered by the end of Project Mitori
@@ -74,19 +72,19 @@ This README serves as my daily development log.
 
 ---
 
-### What I've Built So Far
+# What I've Built So Far
 
-# mitori_backend (The backend)
+## mitori_backend (The backend)
 * I am tackling Django head on first, Django will serve as the locker room or the ultimate lock for our data, we will use django mainly for:
 * Custom Authentication
 * Django comes with built ini support for several databases and postgresql is one of them we need that because it will be a dataextensive application and we need to have a framework that is proven the test of time , has strong policies , data integrity policies and out of the gate security for everything an enterprise application is supposed to encounter
 
-**1. Secure Authentication**
+### Secure Authentication
 * Ripped out Django's default username system.
 * Built a custom User model (`AbstractBaseUser`) that uses Email and Password as the primary login, matching modern app standards. Only email is being used as of right now.
 
 
-**2. The Financial Ledger Architecture**
+### The Financial Ledger Architecture
 __core_Ledger__ is the secured vault of our application
 Since django is for the absolute data integrity we can not leave any loophole in our safe that guards the data.
 __models.py__
@@ -127,7 +125,7 @@ __That flow is Client(Frontend)->Mitori Engine(FastAPI - Validate with Redis Cac
 
 __when i'll be patching these loopholes i'll refernce this readme in the commit and i'll also be tagging it in what commit this certain improvements where made__
 
-# mitori_engine (The Engine)
+## mitori_engine (The Engine)
 We need FastApis for out matching engine , Instead of frontend reaching out to backend django everytime we have an order we do not reach out to our backend django and register it.
 Because in a high frequency system like this there can be certain situations
 * Order stays hanging , is not filled.
@@ -154,7 +152,7 @@ mitori_engine will be our main directory where we will be implementing our engin
 core will be the directry that will house engine and models.
 main.py is our file that will have configuered routes for our api.
 
-**1. core**
+### Core
 * As the name suggests core holds the core functionality of our FastApi engine.
 it houses two files
 *models (Memory Optimization)*
@@ -167,7 +165,7 @@ To make our engine fast we will strip the python class from it's under the hood 
 * slot
 python provides these option so that we can remove underhood dict from the class and give us speed and memory saving.
 
-**2. engine (Matching core)**
+### engine (Matching core)
 * Engine will be the place where we will create our matching engine.
 we will take advantage of the heap data structure of the python for this purpose, we will be creating priority queue strictly based on metrics that, the priority will be given to the order that is 
 * price
@@ -190,7 +188,7 @@ when a user would be requesting to buy or sell a certain stock , ticker will be 
     sell side  will be a min heap with lowest price on the top
 
 
-**3. main**
+### main
 In the main we implement
 * pydantic model for mainatining data integrity of the data received from the user request.
 * maintaining the record for markets so that no malicious user can create another order book with script injection.
@@ -204,7 +202,7 @@ In the main we implement
 * [ ] Write ahead log
 * [ ] Cryptographic Ownership for the order
 
-# Streaming Bridge (Fast Api | Fire and persist)
+## Streaming Bridge (Fast Api | Fire and persist)
 Now we introduce Redis not because it is a fancy software that every production grade application uses but because there is a certain need that we have for redis in our decoupled system.
 You might ask what that need might be why did i chose redis stream instead of standard HTTP call between django and fastapi
 **Need for Redis**
@@ -229,15 +227,15 @@ along side the connection pool and lifespan events i also used depenedency injec
 
 ___Finally the choice of implementing appache kafka was alsso present , but i did not chose that route because , first of all apache kafka is for enterprise applications that are managing millions top hundred-millions data per second plus at this point if i were to implement apache kafka i would be over engineering the project , which is the biggest pifall you want to avoid__
 
-# JWT Implementation
-As i mentioned in the django section before  JWT is something that is for future improvements but when i started building this project I found it the absolutely necessary to implement the jwt auth because of sevaral reasons
+## JWT Implementation
+As i mentioned in the django section before  JWT is something that was for future improvements but when i started building this project I found it the absolutely necessary to implement the jwt auth because of sevaral reasons
 * I need to know if the one who is putting the trade is authorized to do so?
 * What if the person is just trying to corrupt the database? 
 *How will the order be linked if there is not id being passed around from django to fastapi and back to django when it was time for settlement of the data.
 
 These quesstions made me add jwt before proceeding any further and also they influenced other features and security implementations in the project as well.
 
-**Implementation**
+### Implementation
 Now as always there were two to three choices for me when it comes to auth
 * Handling auth at Fastapi
 * Handling at Django
@@ -260,7 +258,7 @@ By using secret key , we use the same secret key we used at django to encrypt th
 
 I used the same architecture i used in redis  stream implementation , i created a ***security.py*** file with authenticated user data model and ***is_Authenticated_user**, and there i check decrypt the request and check for credentials and based on the state of the request either the request is entertained or rejected.
 
-# Django daemon (Custom Mnagement )
+## Django daemon (Custom Mnagement )
 Now after implementing the executed streams and implementing jwt we made sure that,
 No unauthenticated user can put a trade and the matched trades are always pushed into redis stream we need django to pick up those trades and commit them into our database.
 How can we do that, first of all we need to establish what we want to do.
@@ -287,7 +285,7 @@ management/
                 ->__init__.py
         ->__init__.py
 ```
-## Architectural Decisions
+### Architectural Decisions
 Now here is another architectural decision i had to make it was related to the redis stream i had configuered earlier on the fastAPI engine , I had to chose if the connection the redis on my django would be asynchronous or synchronous. I chose it to be synchronous in my __django daemon__ and on fastApi i had already made it asynchronous.
 The reason for it being synchronous in django daemon is because , django daemon configuration will be strcitly all about 
 * Security
@@ -306,13 +304,13 @@ That is how i solved the race condition and the problem of half commits to datab
 at the end after daemon has made every possible change in the databse i used __on_commit__ which is a hook that runs only after the transaction has been succesfully committed to the database. It sends __XACK__ to redis signaling it to remove message from the stream.
 __There are other on_commit as well which i'll get into the section of cache__
 
-# Cache for Mitori Engine
+## Cache for Mitori Engine
 After getting through with django daemon , I still had to tackle the single most important piece in my decoupled project which was
 __decoupling a high speed Ram Cache based matching engine from permanent disk storage while gauranteeing absolute consistency between the two at the same time__
 If you read the above line you might be confused what i am talking about so lemme walk you through the problem what my system had, Everything is  working fine 
 user logs in gets a token and when he wants to trade the token is passed across every request as well as asynchronous redis pool connection so that when trade matches it is pushed into the redis stream , and when it is pushed into redis stream the django daemon picks it up and settle it in database , but million dollar question here is __how would fastapi know if a user who is trying to put a trade has the funds to trade or not?__
 
-## Architectural Decisions
+### Architectural Decisions
 So for that purpose we need to find a way to determine at the time of login if a user has enough funds , enough shares to trade and with every trade we also need to find a way to recalculate and refresh the funds and shares so that a user does not manipulate oor trick the system into trdaing the shares he does not have.
 
 I hope you get the picture for that we again turn to our trusted friend and fast memory based database Redis but with a different approach now.
@@ -365,7 +363,7 @@ for buyer we implemennt watch on portfolio and for seller we implement watch on 
 ```
 pipeline.watch() ///implements watch over the key, locks it
 
-pipeline.Multi() /// puts the pipeline into transaction mode , instead of implementing those changes at once they are buffered inside the memory for implementating once , allows for atomicity
+pipeline.multi() /// puts the pipeline into transaction mode , instead of implementing those changes at once they are buffered inside the memory for implementating once , allows for atomicity
 
 pipeline.execute() /// execute commmands at once which are buffered in the memory
 ```
