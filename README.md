@@ -76,7 +76,7 @@ This README serves as my daily development log.
 
 ### What I've Built So Far
 
-### mitori_backend (The backend)
+# mitori_backend (The backend)
 * I am tackling Django head on first, Django will serve as the locker room or the ultimate lock for our data, we will use django mainly for:
 * Custom Authentication
 * Django comes with built ini support for several databases and postgresql is one of them we need that because it will be a dataextensive application and we need to have a framework that is proven the test of time , has strong policies , data integrity policies and out of the gate security for everything an enterprise application is supposed to encounter
@@ -114,7 +114,7 @@ Finally i incorporate these views with the url to make the api endpoints fully f
 
 __One Note : before I wrap this django implementation is there are still several things that are still to be implemeneted , I have just laid the ground work for the project , that will be leveraging several technologies , moving away from cohesive or monolithic structures and dwelling into the decoupled land of architecture, all of the unfinished features will be fully implmented once the flow of the project is somewhat complete__
 
-__That flow is Client(Frontend)->Mitori Engine(FastAPI - Validate with Redis Cache ,Lock+match)->Redis Stream->Django Daemon(Custom Manager for trade settelment in database) -> Postgres(the source of ultimate trade history and portfolio) ->Redis Stream__
+__That flow is Client(Frontend)->Mitori Engine(FastAPI - Validate with Redis Cache ,Lock+match)->Redis Stream->Django Daemon(Custom Manager for trade settelment in database) -> Postgres(the source of ultimate trade history and portfolio) ->Redis Cache__
 
 ### Future Improvements in Django microservice
 * [x] Solving Race condition (solved when implementing cache and Custom Management Command for django daemon | it is solved in multiple commits) [First Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/bfa18f4acf73c49252229f8dee6747a4d1448d5f) - [Last Commmit](https://github.com/Har1s-Akbar/Project-Mitori/commit/ba129131c2ec9f6df374d26bc98f10b9c13dbc6b) 
@@ -127,7 +127,7 @@ __That flow is Client(Frontend)->Mitori Engine(FastAPI - Validate with Redis Cac
 
 __when i'll be patching these loopholes i'll refernce this readme in the commit and i'll also be tagging it in what commit this certain improvements where made__
 
-### mitori_engine (The Engine)
+# mitori_engine (The Engine)
 We need FastApis for out matching engine , Instead of frontend reaching out to backend django everytime we have an order we do not reach out to our backend django and register it.
 Because in a high frequency system like this there can be certain situations
 * Order stays hanging , is not filled.
@@ -204,7 +204,7 @@ In the main we implement
 * [ ] Write ahead log
 * [ ] Cryptographic Ownership for the order
 
-### Streamin Bridge (Fire and persist)
+# Streaming Bridge (Fast Api | Fire and persist)
 Now we introduce Redis not because it is a fancy software that every production grade application uses but because there is a certain need that we have for redis in our decoupled system.
 You might ask what that need might be why did i chose redis stream instead of standard HTTP call between django and fastapi
 **Need for Redis**
@@ -252,3 +252,130 @@ I solved it by managing the auth at django which was easier than expected as i w
 You can see the implementation for jwt here 
 [First Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/1033b34218c429f67be6f038027ce83e90bf195f) - [Last Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/c52506520e7ae70505bef895a2c76c26e264fd93)
 
+when a user logs in simplejwt produces two token one is the access token and one is refresh token.
+Access token is the one with which you can login and it gives you the authority to interact with the endpoint and refresh token is used to refresh the login it is something that the user does not have to worry about. It is done by simplejwt.
+
+Now access token has user data, you can customize it to send anytype of data , i used it to extract the user id and kyc also one thing to note how can we verify at fastapi if that user is authenticated without requesting or talking to django and database ?
+By using secret key , we use the same secret key we used at django to encrypt the data we decrypt the data at fastapi. That way we save ourselves a trip to database and reading and verifying from records.
+
+I used the same architecture i used in redis  stream implementation , i created a ***security.py*** file with authenticated user data model and ***is_Authenticated_user**, and there i check decrypt the request and check for credentials and based on the state of the request either the request is entertained or rejected.
+
+# Django daemon (Custom Mnagement )
+Now after implementing the executed streams and implementing jwt we made sure that,
+No unauthenticated user can put a trade and the matched trades are always pushed into redis stream we need django to pick up those trades and commit them into our database.
+How can we do that, first of all we need to establish what we want to do.
+* We want to take the new data in streams
+* Redis store the data in a long string so we need to flatten it into a dictionary.
+* we need the django daemon to run infinately, lookinng for the streams and commiting them in database.
+* we need to implment security rules such that no data is corrupted.
+
+for this i chose django custom commands. Django custom commands are very powerful because first of all when you run 
+```
+python manage.py runserver
+python manage.py createsuperuser
+python manage.py makemigrations
+python manage.py migrate
+```
+They are all django commands , I intend to develop a command when called  will spawn an infinite daemon that will keep on running and it's  only job will be taking the trades from streams and managing the database on basis of those trades and also updating cache, I will cover this later in the topic of cache how we will implement it.
+___Django Custom Commands are very powerful they have full access to the whole django ecosystem , django database configuration , database infrastructure , files, built in commmands evrything__
+
+the practice for building a custom command is you create a folder structure like this
+```
+management/
+        ->commands/
+                ->mycommand.py
+                ->__init__.py
+        ->__init__.py
+```
+## Architectural Decisions
+Now here is another architectural decision i had to make it was related to the redis stream i had configuered earlier on the fastAPI engine , I had to chose if the connection the redis on my django would be asynchronous or synchronous. I chose it to be synchronous in my __django daemon__ and on fastApi i had already made it asynchronous.
+The reason for it being synchronous in django daemon is because , django daemon configuration will be strcitly all about 
+* Security
+* Atomicity
+* Solving Race conditions
+* Maintaing the integrity of trades in database
+Based on that reason we do not want asynchronous connection to redis. Django will settle one trade at a time with complete authority and security applied to the trade.
+Suppose if we configuered django to settle all trades at once not one by one, it will introduce many flaws in architecture as well as database.
+If a user has put multiple trades and they are matched available in redis stream and our django daemon is trying to settle all trades at once , it will introduce race condition where one portfolio of  the user will be changing in the middle of the settlement of another trade which we do not want.
+That is why synchronous redis was implemented.
+
+After configuration of redis in our django daemon I move toward reading the stream aand settling the trade in our postgreSQL, After flattening the redis stream and properly turning it into ***python dict*** the data is to be settled in the database.
+Now for it i could have gone with normal manipulation of database but since it is a hih frequency system that needs ultimate security across all fronts , I chose to implement those changes in postgres using __transactions.atomic()__ atomicity is really important in database , we  do not want half data of our trade in our datbase and half being flushed out because of something , so that is why I used __atomic__ this way either all the channges are made in database and the __XACK__ is sent to redis which signals redis to remove the message from the pending list or no change is made in case of server crash and the stream remains in tact for django daemon to settle later.
+With Atomicity locking is important and necessary as well because we do not want any race condition , The type of locking I chose here is __pessimistic locking using select_for_update__ pessimistic locking is a fancy way of saying under no condition the record i am performing action on is available for anyone else.
+That is how i solved the race condition and the problem of half commits to database.
+at the end after daemon has made every possible change in the databse i used __on_commit__ which is a hook that runs only after the transaction has been succesfully committed to the database. It sends __XACK__ to redis signaling it to remove message from the stream.
+__There are other on_commit as well which i'll get into the section of cache__
+
+# Cache for Mitori Engine
+After getting through with django daemon , I still had to tackle the single most important piece in my decoupled project which was
+__decoupling a high speed Ram Cache based matching engine from permanent disk storage while gauranteeing absolute consistency between the two at the same time__
+If you read the above line you might be confused what i am talking about so lemme walk you through the problem what my system had, Everything is  working fine 
+user logs in gets a token and when he wants to trade the token is passed across every request as well as asynchronous redis pool connection so that when trade matches it is pushed into the redis stream , and when it is pushed into redis stream the django daemon picks it up and settle it in database , but million dollar question here is __how would fastapi know if a user who is trying to put a trade has the funds to trade or not?__
+
+## Architectural Decisions
+So for that purpose we need to find a way to determine at the time of login if a user has enough funds , enough shares to trade and with every trade we also need to find a way to recalculate and refresh the funds and shares so that a user does not manipulate oor trick the system into trdaing the shares he does not have.
+
+I hope you get the picture for that we again turn to our trusted friend and fast memory based database Redis but with a different approach now.
+previously I configuered redis as a fire and persist stream now i will configuere the same redis to behave as a cache to store the portfolio and positions hash (which will in turn have the funds and share the user has at the time of login)
+
+So the flow of how i solved this is
+* Configuering django service for calculation of funds
+* configuering fastApi as the Authority who will check if a user has funds
+
+### Configuring Django 
+I configuered django in such a way that when ever a user logs in his/her account , a function is called that is present in the services.py folder in core_ledger that gets the user portfolio funds and user positions/trades and push then into redis cache using hset.
+This is how django is configuered to deliver absolute truth to the redis cache which will be later read by fastapi to determine if a user has funds for trades
+In setting the cache, I add one more field along with the actual fields
+for funds i add
+* available funds
+* locked balance
+for shares i add
+* ticker
+*locked_ticker
+
+locked fields arre zero at the time of log in but when a user puts a trade funds or shares equivalent are added to the locked field and redis keeps a watch over them , implementing a optimistic lock on them so that they are accessible but can not be changed unless the trade is settleled by the django and funds arre releazed from the locked section
+
+### configuring FastApi
+Now there were certain patterns i could have chose from to set up fastapi to determin the funds of user.
+* added a section in my security.py which is the file that has the code for checking the credentials of user
+* added a new file funds.py in api/ folder and used it to craft a function that will be injected in every request and it will use depends , no request can be processed without it.
+
+I chose the second option and i will tell you why because if i had gone with the first option i will be  binding my hands into using this is_user_authenticated function just for the /order route , it would have created a monolithic pattern breaking what i am trying to build , the effect of this would have been , if i wanted to use this function for the user to see his profile , it would have checked the balance then as well and if the balance was zero it would not have allowed the user to see his profile as well.
+That is why i went with dependency injection architecture with depends , it ensures the state of my engine remains decoupled and this function is called only in places where i want to check the funds.
+
+Now lets get into the architectural decisions that went into creating the function, In the have_funds.py i created a function have_funds this function takes three parameters and is dependent on them
+* Request 
+* is_user_authenticated
+* order object
+__Request__ from request we will get the async redis pool that we can just grab a connection from and perform our cache actions
+__is_user_authenticated__ we tell fastApii , in order to process this request you have to first go and run that function and get me the object that function retuens
+__order object__ we need this order object because we need to get the side if the user is buying or selling based  on that we will decide if we want to check the __funds/money__ or we want to check the __shares__
+after that we grab the order object and we extract the things we want such as order side , order owner id , order ticker and etc.
+we specifiy the redis instance from the request object we are getting.
+and then we try to do conditional check if it is a sell side order or a buy side order.
+* if it is a sell side we check for the certain ticker symbol and shares in redis cache , if shares are > order shares then user is allowed to trade
+* if it is buy side we check the portfolio of user for the funds if the user has enough funds for buying the shares
+* we also add two price fields, price that was locked by user and price that order was settled at.
+__because when you are buying or selling only often your order is filled at the price you want__
+
+#### Optimistic lock
+Here when we determin if the user haas enough funds and is allowed to trade we open a pipeline and we implemet a watch on the certain cache we want to implement changes on , 
+for buyer we implemennt watch on portfolio and for seller we implement watch on positions.
+
+```
+pipeline.watch() ///implements watch over the key, locks it
+
+pipeline.Multi() /// puts the pipeline into transaction mode , instead of implementing those changes at once they are buffered inside the memory for implementating once , allows for atomicity
+
+pipeline.execute() /// execute commmands at once which are buffered in the memory
+```
+
+without watch multi and execute are flawed and bound to change if another request arrives , watch solves this problem.
+After that we implement the changes into the redis cache and now since we have settled the cache at the engine level we need to settle it in django daemon and update it as well.
+
+#### django daemon
+Now we move once again to django daemon and in the __transaction.on_commit__ we call another service function we created which is __settle_cache__ this function settles the portfolio and postions , if a user is trading the shares for one time we create the cache there and then adding to the cache which is available to fastapi at the same time.
+It frees the locked funds and locked shares on settlement and update the cache positions and portfolio at the same time.
+
+This is how I tackled this problem of maintaing the data integrity across postgres , django aand fastapi at the same time.
+__Redis cache math uses float due to HINCRBYFLOAT's constraints, but this is self-healing — the cache is fully rehydrated from Postgres's Decimal source of truth on every login, bounding any drift to the current session.__
