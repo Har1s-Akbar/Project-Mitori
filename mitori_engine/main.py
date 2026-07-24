@@ -101,8 +101,9 @@ async def delete_order(order_id : str, ticker:str,redis_client : redis.Redis = D
                     pipeline.hincrby(f'cache:positions:{user_id}',f'locked_{ticker}', -order_canceled.number_of_shares)
             elif order_canceled.side == Side.BUY:
                 safe_price = float(order_canceled.price)
-                pipeline.hincrbyfloat(f'cache:portfolio:{user_id}','available_cash', safe_price)
-                pipeline.hincrbyfloat(f'cache:portfolio:{user_id}',f'locked_balance', -safe_price)
+                total_price = safe_price * order_canceled.number_of_shares
+                pipeline.hincrbyfloat(f'cache:portfolio:{user_id}','available_cash', total_price)
+                pipeline.hincrbyfloat(f'cache:portfolio:{user_id}',f'locked_balance', -total_price)
             await pipeline.execute()
 
         return{
