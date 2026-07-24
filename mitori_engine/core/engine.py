@@ -55,6 +55,6 @@ class OrderBook():
         if order_delete:
             order_delete.is_canceled = True
             self.canceled_uuids.add(order_uuuid)
-            return True
+            return order_delete
         else:
             return False

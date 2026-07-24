@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, status
 from pydantic import Field
 import uuid
 import uvicorn
@@ -11,7 +11,7 @@ import json
 import dataclasses
 from api.have_funds import have_funds
 from schemas.schema import MARKET, OrderReq
-from core.models import Order
+from core.models import Order, Side
 
 @asynccontextmanager
 async def lifespan(app:FastAPI):
@@ -44,6 +44,7 @@ async def place_order(order:OrderReq,
         price = order.price,
         number_of_shares = order.number_of_shares,
         order_owner_id = uuid.UUID(current_user.user_id),
+        is_canceled=False,
     )
 
     print(f"new order id {new_order.order_id}" )
@@ -72,7 +73,36 @@ async def place_order(order:OrderReq,
     }
 
 
+@app.delete("/order/{ticker}/{order_id}")
+async def delete_order(order_id : uuid.uuid4, ticker:str,redis_client : redis.Redis = Depends(get_redis), 
+                       current_user : AuthenticatedUser = Depends(is_user_Authenticated)):
+    if ticker not in MARKET:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No such ticker exist")
+    else:
+        market = MARKET.get(ticker,None)
+        order_canceled = market.tombstone_delete(order_id)
+        if not order_canceled :
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND , detail="Such order does not exist")
+        if current_user.user_id != order_canceled.order_owner_id:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="You do not have permission to cancel this trade")
 
+        user_id = str(order_canceled.order_owner_id)
+        pipeline = redis_client.pipeline()
+        with pipeline:
+            if order_canceled.side == Side.SELL:
+                    pipeline.hincrby(f'cache:positions:{user_id}',ticker,order_canceled.number_of_shares)
+                    pipeline.hincrby(f'cache:positions:{user_id}',f'locked_{ticker}', -order_canceled.number_of_shares)
+            elif order_canceled.side == Side.BUY:
+                safe_price = float(order_canceled.price)
+                pipeline.hincrbyfloat(f'cache:portfolio:{user_id}','available_cash', safe_price)
+                pipeline.hincrbyfloat(f'cache:portfolio:{user_id}',f'locked_balance', -safe_price)
+            pipeline.execute()
 
+        return{
+            "message" : f'Order with id {order_id} was cancelled and funds are returned',
+            "status": status.HTTP_200_OK
+        }
+
+            
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8001, reload=True)
