@@ -304,6 +304,8 @@ That is how i solved the race condition and the problem of half commits to datab
 at the end after daemon has made every possible change in the databse i used __on_commit__ which is a hook that runs only after the transaction has been succesfully committed to the database. It sends __XACK__ to redis signaling it to remove message from the stream.
 __There are other on_commit as well which i'll get into the section of cache__
 
+Django daemon was built in several commits from [First commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/821cfa5b9f30ebc8b1ae3c6faaa69079531631de) - [Last commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/07802b1b65fdfb838fdf80dc66c36cd67ec4b6a9)
+
 ## Cache for Mitori Engine
 After getting through with django daemon , I still had to tackle the single most important piece in my decoupled project which was
 __decoupling a high speed Ram Cache based matching engine from permanent disk storage while gauranteeing absolute consistency between the two at the same time__
@@ -377,3 +379,6 @@ It frees the locked funds and locked shares on settlement and update the cache p
 
 This is how I tackled this problem of maintaing the data integrity across postgres , django aand fastapi at the same time.
 __Redis cache math uses float due to HINCRBYFLOAT's constraints, but this is self-healing — the cache is fully rehydrated from Postgres's Decimal source of truth on every login, bounding any drift to the current session.__
+
+For cache implementation code you can see
+[First commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/426c34fd46b955c5274a0d2508ab27885d05e611) - [Last commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/bc9cb500069ae54b259732fe9aa4abe723fe921f)
