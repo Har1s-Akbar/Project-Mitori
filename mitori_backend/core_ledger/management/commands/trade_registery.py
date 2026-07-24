@@ -69,7 +69,8 @@ class Command(BaseCommand):
                                     try:
                                         buyer_position = Position.objects.select_for_update(nowait=True).get(portfolio=buyer_portfolio,asset_symbol =transaction_data['ticker'])
                                         buyer_position.quantity += quantity
-                                        buyer_position.average_entry_price = (buyer_position.average_entry_price + price_locked)/2
+
+                                        buyer_position.average_entry_price = (buyer_position.average_entry_price*buyer_position.quantity + price_locked*quantity)/(buyer_position.quantity+quantity)
                                         buyer_position.save()
                                     except Position.DoesNotExist:
                                         Position.objects.create(
