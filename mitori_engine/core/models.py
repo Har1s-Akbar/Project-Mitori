@@ -15,6 +15,7 @@ class Order():
     price:Decimal
     number_of_shares:int
     order_owner_id : uuid.UUID
+    is_canceled : bool
     date_time:str = field(default_factory=lambda: str(datetime.now()))
     order_id: uuid.UUID =field(default_factory=lambda:uuid.uuid4())
 
