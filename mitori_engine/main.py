@@ -110,10 +110,10 @@ async def delete_order(order_id : str, ticker:str,redis_client : redis.Redis = D
                 pipeline.hincrbyfloat(f'cache:portfolio:{user_id}','available_cash', total_price)
                 pipeline.hincrbyfloat(f'cache:portfolio:{user_id}',f'locked_balance', -total_price)
 
-            await redis_client.xadd(name="cacelled_order_stream", 
-                                    fields=cancelled_trade_data, 
-                                    maxlen=100000,
-                                    approximate=True)
+            pipeline.xadd(name="cancelled_order_stream", 
+                                fields=cancelled_trade_data, 
+                                maxlen=100000,
+                                approximate=True)
             
             await pipeline.execute()
 
