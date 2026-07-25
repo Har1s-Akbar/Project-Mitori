@@ -50,25 +50,25 @@ class Command(BaseCommand):
                             try:
                                 with transaction.atomic():
 
-                                    if LedgerTransaction.objects.filter(stream_order_id=f'({id}_{TransactionType.SELL.value})').exists():
+                                    if LedgerTransaction.objects.filter(stream_order_id=f'{id}_{TransactionType.SELL.value}').exists():
                                         self.stdout.write(self.style.ERROR(f"Trade already setteled , rejecting the duplicate stream message with id "))
                                         redis_server.xack(stream_name,group_name,id)
                                         continue
                                     else:
-                                        buyer_portfolio = Portfolio.objects.select_for_update(nowait=True).get(user_id=transaction_data['buyer_id'])
-                                        seller_portfolio = Portfolio.objects.select_for_update(nowait=True).get(user_id=transaction_data['seller_id'])
+                                        buyer_portfolio = Portfolio.objects.select_for_update().get(user_id=transaction_data['buyer_id'])
+                                        seller_portfolio = Portfolio.objects.select_for_update().get(user_id=transaction_data['seller_id'])
 
                                         buyer_portfolio.cash_balance -= total
                                         buyer_portfolio.save()
                                         seller_portfolio.cash_balance += total
                                         seller_portfolio.save()
 
-                                        seller_position = Position.objects.select_for_update(nowait=True).get(portfolio=seller_portfolio, asset_symbol = transaction_data['ticker'])
+                                        seller_position = Position.objects.select_for_update().get(portfolio=seller_portfolio, asset_symbol = transaction_data['ticker'])
                                         seller_position.quantity -= quantity
                                         seller_position.save()
 
                                         try:
-                                            buyer_position = Position.objects.select_for_update(nowait=True).get(portfolio=buyer_portfolio,asset_symbol =transaction_data['ticker'])
+                                            buyer_position = Position.objects.select_for_update().get(portfolio=buyer_portfolio,asset_symbol =transaction_data['ticker'])
                                             buyer_position.quantity += quantity
 
                                             buyer_position.average_entry_price = (buyer_position.average_entry_price*buyer_position.quantity + price_locked*quantity)/(buyer_position.quantity+quantity)
@@ -91,8 +91,8 @@ class Command(BaseCommand):
                                                                         )
                                         
                                         LedgerTransaction.objects.create(portfolio = seller_portfolio,
-                                                                        transaction_type=f'{id}_{TransactionType.SELL.value}',
-                                                                        stream_order_id = id+TransactionType.SELL,
+                                                                        stream_order_id = f'{id}_{TransactionType.BUY.value}',
+                                                                        transaction_type=TransactionType.SELL,
                                                                         price_setteled_at=transaction_data['price_setteled_at'],
                                                                         price_locked_by_user = transaction_data['price_locked_by_user'],
                                                                         quantity=transaction_data['quantity'],
