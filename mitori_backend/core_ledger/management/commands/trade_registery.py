@@ -109,8 +109,6 @@ class Command(BaseCommand):
                                     
                             except (utils.OperationalError, LedgerTransaction.DoesNotExist) as e:
                                 self.stdout.write(self.style.ERROR("Settelment failed because {e}")) 
-                time.sleep(0.1)
-
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"error : {e}"))
                 time.sleep(5)
