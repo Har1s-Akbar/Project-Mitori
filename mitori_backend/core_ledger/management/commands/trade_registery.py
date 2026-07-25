@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 import redis
 import time
 import json
-from django.db import transaction, utils
+from django.db import transaction, utils, IntegrityError
 from core_ledger.models import LedgerTransaction , Portfolio, TransactionType,Status, Position
 from decimal import Decimal
 from core_ledger.services import settle_cache
@@ -45,68 +45,75 @@ class Command(BaseCommand):
                             
                             
                             total = quantity* price
-                            # print(f"{ticker} with quantity {data['data']['quantity']} with price {data['data']['price']}")
                             self.stdout.write(self.style.SUCCESS(f"Received Trade with ID {id} | ticker {transaction_data['ticker']}"))  
 
                             try:
                                 with transaction.atomic():
 
-                                    buyer_portfolio = Portfolio.objects.select_for_update(nowait=True).get(user_id=transaction_data['buyer_id'])
-                                    seller_portfolio = Portfolio.objects.select_for_update(nowait=True).get(user_id=transaction_data['seller_id'])
+                                    if LedgerTransaction.objects.filter(stream_order_id=f'({id}_{TransactionType.SELL.value})').exists():
+                                        self.stdout.write(self.style.ERROR(f"Trade already setteled , rejecting the duplicate stream message with id "))
+                                        redis_server.xack(stream_name,group_name,id)
+                                        continue
+                                    else:
+                                        buyer_portfolio = Portfolio.objects.select_for_update(nowait=True).get(user_id=transaction_data['buyer_id'])
+                                        seller_portfolio = Portfolio.objects.select_for_update(nowait=True).get(user_id=transaction_data['seller_id'])
 
-                                    # total = transaction_data['price']*transaction_data['quantity']
-                                    buyer_portfolio.cash_balance -= total
-                                    # print(buyer_portfolio.cash_balance)
-                                    buyer_portfolio.save()
-                                    seller_portfolio.cash_balance += total
-                                    seller_portfolio.save()
+                                        buyer_portfolio.cash_balance -= total
+                                        buyer_portfolio.save()
+                                        seller_portfolio.cash_balance += total
+                                        seller_portfolio.save()
 
-                                    seller_position = Position.objects.select_for_update(nowait=True).get(portfolio=seller_portfolio, asset_symbol = transaction_data['ticker'])
-                                    seller_position.quantity -= quantity
-                                    seller_position.save()
+                                        seller_position = Position.objects.select_for_update(nowait=True).get(portfolio=seller_portfolio, asset_symbol = transaction_data['ticker'])
+                                        seller_position.quantity -= quantity
+                                        seller_position.save()
 
-                                    try:
-                                        buyer_position = Position.objects.select_for_update(nowait=True).get(portfolio=buyer_portfolio,asset_symbol =transaction_data['ticker'])
-                                        buyer_position.quantity += quantity
+                                        try:
+                                            buyer_position = Position.objects.select_for_update(nowait=True).get(portfolio=buyer_portfolio,asset_symbol =transaction_data['ticker'])
+                                            buyer_position.quantity += quantity
 
-                                        buyer_position.average_entry_price = (buyer_position.average_entry_price*buyer_position.quantity + price_locked*quantity)/(buyer_position.quantity+quantity)
-                                        buyer_position.save()
-                                    except Position.DoesNotExist:
-                                        Position.objects.create(
-                                            portfolio=buyer_portfolio,
-                                            asset_symbol=transaction_data['ticker'],
-                                            quantity=quantity,
-                                            average_entry_price=price_locked
-                                        )
-                                    LedgerTransaction.objects.create(portfolio = buyer_portfolio,
-                                                                    transaction_type=TransactionType.BUY,
-                                                                    price_setteled_at=transaction_data['price_setteled_at'],
-                                                                    price_locked_by_user = transaction_data['price_locked_by_user'],
-                                                                    quantity=transaction_data['quantity'],
-                                                                    status=Status.COMPLETED,
-                                                                    asset_symbol=transaction_data['ticker']
-                                                                    )
-                                    
-                                    LedgerTransaction.objects.create(portfolio = seller_portfolio,
-                                                                    transaction_type=TransactionType.SELL,
-                                                                    price_setteled_at=transaction_data['price_setteled_at'],
-                                                                    price_locked_by_user = transaction_data['price_locked_by_user'],
-                                                                    quantity=transaction_data['quantity'],
-                                                                    status=Status.COMPLETED,
-                                                                    asset_symbol=transaction_data['ticker']
-                                                                    )
-                                    transaction.on_commit(
-                                        lambda message_id = id :redis_server.xack(stream_name, group_name,message_id)
-                                    )
-                                    transaction.on_commit(
-                                        lambda data=transaction_data:settle_cache(data, redis_server)
-                                    )
-                                    transaction.on_commit(
+                                            buyer_position.average_entry_price = (buyer_position.average_entry_price*buyer_position.quantity + price_locked*quantity)/(buyer_position.quantity+quantity)
+                                            buyer_position.save()
+                                        except Position.DoesNotExist:
+                                            Position.objects.create(
+                                                portfolio=buyer_portfolio,
+                                                asset_symbol=transaction_data['ticker'],
+                                                quantity=quantity,
+                                                average_entry_price=price_locked
+                                            )
+                                        LedgerTransaction.objects.create(portfolio = buyer_portfolio,
+                                                                        stream_order_id = f'{id}_{TransactionType.BUY.value}',
+                                                                        transaction_type=TransactionType.BUY,
+                                                                        price_setteled_at=transaction_data['price_setteled_at'],
+                                                                        price_locked_by_user = transaction_data['price_locked_by_user'],
+                                                                        quantity=transaction_data['quantity'],
+                                                                        status=Status.COMPLETED,
+                                                                        asset_symbol=transaction_data['ticker']
+                                                                        )
                                         
-                                        lambda message_id = id :self.stdout.write(self.style.SUCCESS(f"order {message_id} properly setteled in database"))
+                                        LedgerTransaction.objects.create(portfolio = seller_portfolio,
+                                                                        transaction_type=f'{id}_{TransactionType.SELL.value}',
+                                                                        stream_order_id = id+TransactionType.SELL,
+                                                                        price_setteled_at=transaction_data['price_setteled_at'],
+                                                                        price_locked_by_user = transaction_data['price_locked_by_user'],
+                                                                        quantity=transaction_data['quantity'],
+                                                                        status=Status.COMPLETED,
+                                                                        asset_symbol=transaction_data['ticker']
+                                                                        )
+                                        transaction.on_commit(
+                                            lambda message_id = id :redis_server.xack(stream_name, group_name,message_id)
+                                        )
+                                        transaction.on_commit(
+                                            lambda data=transaction_data:settle_cache(data, redis_server)
+                                        )
+                                        transaction.on_commit(
+                                            
+                                            lambda message_id = id :self.stdout.write(self.style.SUCCESS(f"order {message_id} properly setteled in database"))
 
-                                    )
-                                    
+                                        )
+
+                            except IntegrityError as e:
+                                self.stdout.write(self.style.WARNING(f'Race condition averted for {id}'))
+                                redis_server.xack(stream_name,group_name,id)
                             except (utils.OperationalError, LedgerTransaction.DoesNotExist) as e:
                                 self.stdout.write(self.style.ERROR("Settelment failed because {e}")) 
             except Exception as e:
