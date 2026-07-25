@@ -96,6 +96,11 @@ async def delete_order(order_id : str, ticker:str,redis_client : redis.Redis = D
         user_id = str(order_canceled.order_owner_id)
         pipeline = redis_client.pipeline()
         async with pipeline:
+            cancelled_trade_dict = dataclasses.asdict(order_canceled)
+            cancelled_trade_data = {
+                "ticker" : ticker,
+                "data": json.dumps(cancelled_trade_dict, default=str)
+            }
             if order_canceled.side == Side.SELL:
                     pipeline.hincrby(f'cache:positions:{user_id}',ticker,order_canceled.number_of_shares)
                     pipeline.hincrby(f'cache:positions:{user_id}',f'locked_{ticker}', -order_canceled.number_of_shares)
@@ -104,6 +109,12 @@ async def delete_order(order_id : str, ticker:str,redis_client : redis.Redis = D
                 total_price = safe_price * order_canceled.number_of_shares
                 pipeline.hincrbyfloat(f'cache:portfolio:{user_id}','available_cash', total_price)
                 pipeline.hincrbyfloat(f'cache:portfolio:{user_id}',f'locked_balance', -total_price)
+
+            await redis_client.xadd(name="cacelled_order_stream", 
+                                    fields=cancelled_trade_data, 
+                                    maxlen=100000,
+                                    approximate=True)
+            
             await pipeline.execute()
 
         return{

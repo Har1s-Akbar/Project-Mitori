@@ -29,7 +29,6 @@ class Command(BaseCommand):
                 executed_trades = redis_server.xreadgroup(groupname=group_name,consumername=worker_name, streams={stream_name:'>'},block=3000)
                 if executed_trades:
                     for stream_key,messages in executed_trades:
-                        print(messages)
                         print(f"{stream_key} is stream key with message below")
                         for id , data in messages:
                             transaction_data = json.loads(data['data'])  
