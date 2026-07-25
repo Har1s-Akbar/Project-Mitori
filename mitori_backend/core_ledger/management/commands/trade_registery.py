@@ -81,7 +81,6 @@ class Command(BaseCommand):
                                     LedgerTransaction.objects.create(portfolio = buyer_portfolio,
                                                                     transaction_type=TransactionType.BUY,
                                                                     price_setteled_at=transaction_data['price_setteled_at'],
-                                                                    
                                                                     price_locked_by_user = transaction_data['price_locked_by_user'],
                                                                     quantity=transaction_data['quantity'],
                                                                     status=Status.COMPLETED,
@@ -97,14 +96,14 @@ class Command(BaseCommand):
                                                                     asset_symbol=transaction_data['ticker']
                                                                     )
                                     transaction.on_commit(
-                                        lambda message_id = id :redis_server.xack(stream_name, group_name,id)
+                                        lambda message_id = id :redis_server.xack(stream_name, group_name,message_id)
                                     )
                                     transaction.on_commit(
                                         lambda data=transaction_data:settle_cache(data, redis_server)
                                     )
                                     transaction.on_commit(
                                         
-                                        lambda message_id = id :self.stdout.write(self.style.SUCCESS(f"order {id} properly setteled in database"))
+                                        lambda message_id = id :self.stdout.write(self.style.SUCCESS(f"order {message_id} properly setteled in database"))
 
                                     )
                                     
