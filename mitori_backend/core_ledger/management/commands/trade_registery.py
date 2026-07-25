@@ -91,7 +91,7 @@ class Command(BaseCommand):
                                                                         )
                                         
                                         LedgerTransaction.objects.create(portfolio = seller_portfolio,
-                                                                        stream_order_id = f'{id}_{TransactionType.BUY.value}',
+                                                                        stream_order_id = f'{id}_{TransactionType.SELL.value}',
                                                                         transaction_type=TransactionType.SELL,
                                                                         price_setteled_at=transaction_data['price_setteled_at'],
                                                                         price_locked_by_user = transaction_data['price_locked_by_user'],
