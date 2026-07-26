@@ -3,10 +3,8 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15-alpine
-    environment:
-      POSTGRES_USER: ${DATABASE_USER}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
-      POSTGRES_DB: ${DATABASE_NAME}
+    env_file:
+      - .env
     ports:
       - ${DATABASE_PORT}:${DATABASE_PORT}
     volumes:
@@ -38,13 +36,6 @@ services:
       - "8001:8001"
     env_file:
       - .env
-    environment:
-      - POSTGRES_DB=${DATABASE_NAME}
-      - POSTGRES_USER=${DATABASE_USER}
-      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
-      - POSTGRES_HOST=${DATABASE_HOST}
-      - POSTGRES_PORT=${DATABASE_PORT}
-      - REDIS_URL=redis://redis:6379/0
     depends_on:
       - postgres
       - redis
@@ -57,16 +48,9 @@ services:
     depends_on:
       - postgres
       - redis
-      -mitori_backend
+      - mitori_backend
     env_file:
       - .env
-    environment:
-      - POSTGRES_DB=${DATABASE_NAME}
-      - POSTGRES_USER=${DATABASE_USER}
-      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
-      - POSTGRES_HOST=${DATABASE_HOST}
-      - POSTGRES_PORT=${DATABASE_PORT}
-      - REDIS_URL=redis://redis:6379/0
 
   cancellation_daemon:
     build:
@@ -75,16 +59,9 @@ services:
     depends_on:
       - postgres
       - redis
-      -mitori_backend
+      - mitori_backend
     env_file:
       - .env
-    environment:
-      - POSTGRES_DB=${DATABASE_NAME}
-      - POSTGRES_USER=${DATABASE_USER}
-      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
-      - POSTGRES_HOST=${DATABASE_HOST}
-      - POSTGRES_PORT=${DATABASE_PORT}
-      - REDIS_URL=redis://redis:6379/0
-
+      
 volumes:
   postgres_data:
