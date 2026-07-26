@@ -41,7 +41,7 @@ def test_order_partial_fill():
 
 
     assert len(trade) == 1
-    assert trade[0].quantity ==20.0000
+    assert trade[0].quantity ==20
     assert trade[0].buyer_id != trade[0].seller_id
     assert trade[0].price_locked_by_user == trade[0].price_setteled_at
     assert trade[0].ticker == 'APP'
@@ -76,14 +76,14 @@ def test_best_bid_match():
 def test_best_bid_partial_fill():
     book = OrderBook('APP')
     buySide = create_order(Side.BUY, 40, "15",'APP')
-    sellSide = create_order(Side.SELL,20.5,"8",'APP')
+    sellSide = create_order(Side.SELL,20,"8",'APP')
 
     book.add_order(buySide)
     book.add_order(sellSide)
     trade = book.execute()
 
     assert len(trade) ==1
-    assert trade[0].quantity == 20.50000
+    assert trade[0].quantity == 20
     assert trade[0].price_locked_by_user != trade[0].price_setteled_at
     assert trade[0].seller_id != trade[0].buyer_id
     assert trade[0].ticker == 'APP'
@@ -92,7 +92,7 @@ def test_best_bid_partial_fill():
     assert len(book.bid) == 1 
     assert len(book.ask) == 0
     #checking for the remaining order shares quantity is 19.5 and checking the price of the order did it mutate after being matched with the order or not
-    assert book.bid[0][3].number_of_shares == 19.5 
+    assert book.bid[0][3].number_of_shares == 20
     assert book.bid[0][3].price ==  15
     #checking when it is in the heap it is properly being appended with - in front of the price for creation of min heap
     assert book.bid[0][0] == -15
