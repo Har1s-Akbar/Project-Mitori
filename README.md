@@ -195,10 +195,10 @@ In the main we implement
 * route configuration and making sure that engine is running
 
 ### Future Improvements in engine microservice
-* [ ] Tombstone Cancellation
-* [ ] Partial refill injection into heap
+* [x] Tombstone Cancellation - implemented tombstone cancellation [first Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/690eac80205244c9910414d4d5e70e7c776d640e) - [Last Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/641e122c40a5d9e385ae181d9edae02b2ecff13d)
+* [] Partial refill injection into heap
 * [ ] MultiWorker scaling for the offered Market
-* [ ] Idempotency Protection
+* [x] Idempotency Protection - Solved Idempotency in the django daemon which will protect against the settelment of identical/same orders  [First Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/426aae4d6475781ce7e799030f45606e71c0b3f6) - [Last Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/67f905fe409739dd15105e4d050051da76246f55)
 * [ ] Write ahead log
 * [ ] Cryptographic Ownership for the order
 
