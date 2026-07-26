@@ -9,11 +9,21 @@ services:
       - ${DATABASE_PORT}:${DATABASE_PORT}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   mitori_engine:
     build:
@@ -26,6 +36,7 @@ services:
       - REDIS_URL=redis://redis:6379/0  
     depends_on:
       - redis
+          condition:service_healthy
     volumes:
       - ./mitori_engine:/app
 
@@ -38,7 +49,9 @@ services:
       - .env
     depends_on:
       - postgres
+          condition:service_healthy
       - redis
+          condition:service_healthy
     volumes:
       - ./mitori_backend:/app
   trade_daemon:
@@ -47,7 +60,9 @@ services:
     command: python manage.py trade_registery
     depends_on:
       - postgres
+          condition:service_healthy
       - redis
+          condition:service_healthy
       - mitori_backend
     env_file:
       - .env
@@ -58,10 +73,12 @@ services:
     command: python manage.py settle_cancelled_orders
     depends_on:
       - postgres
+          condition:service_healthy
       - redis
+          condition:service_healthy
       - mitori_backend
     env_file:
       - .env
-      
+
 volumes:
   postgres_data:
