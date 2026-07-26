@@ -5,6 +5,10 @@ services:
     image: postgres:15-alpine
     env_file:
       - .env
+    environment:
+      - POSTGRES_USER=${DATABASE_USER}
+      -  POSTGRES_PASSWORD=${DATABASE_PASSWORD}
+      - POSTGRES_DB=${DATABASE_NAME}
     ports:
       - ${DATABASE_PORT}:${DATABASE_PORT}
     volumes:
@@ -33,10 +37,15 @@ services:
     env_file:
       - .env
     environment:
-      - REDIS_URL=redis://redis:6379/0  
+      - POSTGRES_DB=${DATABASE_NAME}
+      - POSTGRES_USER=${DATABASE_USER}
+      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
+      - POSTGRES_HOST=${DATABASE_HOST}
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379/0 
     depends_on:
-      - redis
-          condition:service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - ./mitori_engine:/app
 
@@ -47,11 +56,18 @@ services:
       - "8001:8001"
     env_file:
       - .env
+    environment:
+      - POSTGRES_DB=${DATABASE_NAME}
+      - POSTGRES_USER=${DATABASE_USER}
+      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
+      - POSTGRES_HOST=${DATABASE_HOST}
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379/0
     depends_on:
-      - postgres
-          condition:service_healthy
-      - redis
-          condition:service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     volumes:
       - ./mitori_backend:/app
   trade_daemon:
@@ -59,26 +75,42 @@ services:
       context: ./mitori_backend
     command: python manage.py trade_registery
     depends_on:
-      - postgres
-          condition:service_healthy
-      - redis
-          condition:service_healthy
-      - mitori_backend
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mitori_backend:
+        condition: service_started
     env_file:
       - .env
+    environment:
+      - POSTGRES_DB=${DATABASE_NAME}
+      - POSTGRES_USER=${DATABASE_USER}
+      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
+      - POSTGRES_HOST=${DATABASE_HOST}
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379/0
 
   cancellation_daemon:
     build:
       context: ./mitori_backend
     command: python manage.py settle_cancelled_orders
     depends_on:
-      - postgres
-          condition:service_healthy
-      - redis
-          condition:service_healthy
-      - mitori_backend
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mitori_backend:
+        condition: service_started
     env_file:
       - .env
+    environment:
+      - POSTGRES_DB=${DATABASE_NAME}
+      - POSTGRES_USER=${DATABASE_USER}
+      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
+      - POSTGRES_HOST=${DATABASE_HOST}
+      - POSTGRES_PORT=5432
+      - REDIS_URL=redis://redis:6379/0
 
 volumes:
   postgres_data:
