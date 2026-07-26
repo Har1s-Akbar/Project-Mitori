@@ -1,17 +1,26 @@
-from fastapi import HTTPException, status
-from fastapi import Request
+from fastapi import HTTPException, status, Request 
 from api.security import is_user_Authenticated, AuthenticatedUser
 from fastapi import Depends
-from schemas.schema import OrderReq
+from schemas.schema import OrderReq, MARKET
 from decimal import Decimal
 import redis.exceptions as exp
+from typing import AsyncGenerator
 
-async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Authenticated) ,order:OrderReq=None ):
+async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Authenticated) ,order:OrderReq=None )-> AsyncGenerator[AuthenticatedUser,None]:
+
+    if order.ticker not in MARKET:
+        raise HTTPException(status_code=404,detail="Ticker does not exist")
+
     order_side = order.side
     order_quantity = order.number_of_shares
     order_price = order.price
     order_ticker = order.ticker
     order_user_id = user.user_id
+
+    safe_order_price = Decimal(order_price)
+    safe_order_quantity = Decimal(order_quantity)
+    total = safe_order_price*safe_order_quantity
+    safe_total_for_redis = str(total)
 
     retry_counter = 3
 
@@ -67,3 +76,17 @@ async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Auth
                 if retry_counter == 0:
                     raise HTTPException(status_code=status.HTTP_409_CONFLICT,detail="Retry your order in few seconds")
                 continue
+    try:
+        yield user
+    except Exception as route_error:
+        async with redis_connection_port.pipeline() as pipeline:
+            if order_side == "sell":
+                pipeline.hincrby(f'cache:positions:{order_user_id}', order_ticker,order_quantity)
+                pipeline.hincrby(f'cache:positions:{order_user_id}', f'locked_order_ticker',-order_quantity)
+            if order_side =="buy":
+                pipeline.hincrbyfloat(f'cache:portfolio:{order_user_id}', 'available_cash', safe_total_for_redis)
+                pipeline.hincrbyfloat(f'cache:portfolio:{order_user_id}', 'locked_balance', -safe_total_for_redis)
+
+            await pipeline.execute()
+
+        raise route_error

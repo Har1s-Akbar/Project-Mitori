@@ -1,10 +1,14 @@
 import redis.asyncio as redis
 from redis.asyncio import BlockingConnectionPool
+import os 
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def create_redis_pool () -> BlockingConnectionPool:
     return BlockingConnectionPool(
-        host = "localhost",
-        port = 6379,
+        host = os.getenv('REDIS_HOST', redis),
+        port = os.getenv('REDIS_PORT',6379),
         db = 0,
         decode_responses=True,
         max_connections=15,

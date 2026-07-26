@@ -30,12 +30,11 @@ app = FastAPI(
 )
 
 
-@app.post("/order", dependencies=[Depends(have_funds)])
+@app.post("/order")
 async def place_order(order:OrderReq, 
                       redis_client : redis.Redis = Depends(get_redis)
-                      ,current_user : AuthenticatedUser=Depends(is_user_Authenticated)):
-    if order.ticker not in MARKET:
-        raise HTTPException(status_code=404,detail="Ticker does not exist")
+                      ,current_user : AuthenticatedUser=Depends(have_funds)):
+
     target_book = MARKET[order.ticker]
 
     new_order = Order(
