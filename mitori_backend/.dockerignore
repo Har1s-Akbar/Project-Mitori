@@ -1,0 +1,32 @@
+# Git
+.git
+.gitignore
+
+# Virtual Environments (Crucial to block!)
+venv/
+.venv/
+env/
+ENV/
+
+# Python caching artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Local database files (Don't copy local db files into Postgres!)
+*.sqlite3
+*.db
+
+# Testing and coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local configuration and secrets
+.env
+*.log
+
+# IDE Specific folders
+.vscode/
+.idea/

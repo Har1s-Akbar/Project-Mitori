@@ -22,6 +22,8 @@ services:
       context: ./mitori_engine
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       - REDIS_URL=redis://redis:6379/0  
     depends_on:
@@ -34,6 +36,8 @@ services:
       context: ./mitori_backend
     ports:
       - "8001:8001"
+    env_file:
+      - .env
     environment:
       - POSTGRES_DB=${DATABASE_NAME}
       - POSTGRES_USER=${DATABASE_USER}
@@ -46,6 +50,41 @@ services:
       - redis
     volumes:
       - ./mitori_backend:/app
+  trade_daemon:
+    build:
+      context: ./mitori_backend
+    command: python manage.py trade_registery
+    depends_on:
+      - postgres
+      - redis
+      -mitori_backend
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_DB=${DATABASE_NAME}
+      - POSTGRES_USER=${DATABASE_USER}
+      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
+      - POSTGRES_HOST=${DATABASE_HOST}
+      - POSTGRES_PORT=${DATABASE_PORT}
+      - REDIS_URL=redis://redis:6379/0
+
+  cancellation_daemon:
+    build:
+      context: ./mitori_backend
+    command: python manage.py settle_cancelled_orders
+    depends_on:
+      - postgres
+      - redis
+      -mitori_backend
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_DB=${DATABASE_NAME}
+      - POSTGRES_USER=${DATABASE_USER}
+      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
+      - POSTGRES_HOST=${DATABASE_HOST}
+      - POSTGRES_PORT=${DATABASE_PORT}
+      - REDIS_URL=redis://redis:6379/0
 
 volumes:
   postgres_data:
