@@ -6,7 +6,7 @@ import uvicorn
 import redis.asyncio as redis
 from infrastructure.client import create_redis_pool
 from api.security import AuthenticatedUser , is_user_Authenticated
-from .api.check_ownership import check_owner_ship
+from api.check_ownership import check_owner_ship
 from api.dependencies import get_redis
 import json
 import dataclasses
