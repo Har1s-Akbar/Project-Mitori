@@ -21,14 +21,14 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
         fields = ['portfolio','id','transaction_type','amount','status','asset_symbol', 'time_stamp']
         read_only_fields=['id','time_stamp','status']
 
-        def validate(self,data):
-            transaction_type = data.transaction_type
-            amount = data.amount
+    def validate(self,data):
+        transaction_type = data.transaction_type
+        amount = data.amount
 
-            request = self.context.get('request')
-            portfolio = request.user.portfolio
+        request = self.context.get('request')
+        portfolio = request.user.portfolio
 
-            if transaction_type == 'BUY':
-                if portfolio.cash_balance < amount:
-                    raise serializers.ValidationError("Insufficient trades for this fund")
-                return data
+        if transaction_type == 'BUY':
+            if portfolio.cash_balance < amount:
+                raise serializers.ValidationError("Insufficient trades for this fund")
+            return data

@@ -26,7 +26,7 @@ async def is_user_Authenticated(credentials:Annotated[HTTPAuthorizationCredentia
         if user_id_from_req is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                                 detail="Can not proceed : user id not found")
-        if kyc_verified_from_req is False:
+        if not kyc_verified_from_req:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                                 detail="Kyc not completed : can not trade")
         return AuthenticatedUser(user_id=user_id_from_req, kyc_verified=kyc_verified_from_req)
