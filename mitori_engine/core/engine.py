@@ -78,3 +78,6 @@ class OrderBook():
             return order_delete
         else:
             return False
+
+    def get_specific_order_by_id(self, order_uuid):
+        return self.active_uuids.get(str(order_uuid), None)
