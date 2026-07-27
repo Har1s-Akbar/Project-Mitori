@@ -6,6 +6,7 @@ import uvicorn
 import redis.asyncio as redis
 from infrastructure.client import create_redis_pool
 from api.security import AuthenticatedUser , is_user_Authenticated
+from .api.check_ownership import check_owner_ship
 from api.dependencies import get_redis
 import json
 import dataclasses
@@ -75,51 +76,40 @@ async def place_order(order:OrderReq,
 
 @app.delete("/order/{ticker}/{order_id}")
 async def delete_order(order_id : str, ticker:str,redis_client : redis.Redis = Depends(get_redis), 
-                       current_user : AuthenticatedUser = Depends(is_user_Authenticated)):
+                       current_user : AuthenticatedUser = Depends(check_owner_ship)):
 
-    try:
-        valid_uuid = uuid.UUID(order_id)
-    except ValueError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid UUID format")
+    
+    market = MARKET.get(ticker,None)
+    order_canceled = market.tombstone_delete(order_id)
 
-    if ticker not in MARKET:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No such ticker exist")
-    else:
-        market = MARKET.get(ticker,None)
-        order_canceled = market.tombstone_delete(order_id)
-        if not order_canceled :
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND , detail="Such order does not exist")
-        if str(current_user.user_id) != str(order_canceled.order_owner_id):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="You do not have permission to cancel this trade")
-
-        user_id = str(order_canceled.order_owner_id)
-        pipeline = redis_client.pipeline()
-        async with pipeline:
-            cancelled_trade_dict = dataclasses.asdict(order_canceled)
-            cancelled_trade_data = {
-                "ticker" : ticker,
-                "data": json.dumps(cancelled_trade_dict, default=str)
-            }
-            if order_canceled.side == Side.SELL:
-                    pipeline.hincrby(f'cache:positions:{user_id}',ticker,order_canceled.number_of_shares)
-                    pipeline.hincrby(f'cache:positions:{user_id}',f'locked_{ticker}', -order_canceled.number_of_shares)
-            elif order_canceled.side == Side.BUY:
-                safe_price = float(order_canceled.price)
-                total_price = safe_price * order_canceled.number_of_shares
-                pipeline.hincrbyfloat(f'cache:portfolio:{user_id}','available_cash', total_price)
-                pipeline.hincrbyfloat(f'cache:portfolio:{user_id}',f'locked_balance', -total_price)
-
-            pipeline.xadd(name="cancelled_order_stream", 
-                                fields=cancelled_trade_data, 
-                                maxlen=100000,
-                                approximate=True)
-            
-            await pipeline.execute()
-
-        return{
-            "message" : f'Order with id {order_id} was cancelled and funds are returned',
-            "status": status.HTTP_200_OK
+    user_id = str(order_canceled.order_owner_id)
+    pipeline = redis_client.pipeline()
+    async with pipeline:
+        cancelled_trade_dict = dataclasses.asdict(order_canceled)
+        cancelled_trade_data = {
+            "ticker" : ticker,
+            "data": json.dumps(cancelled_trade_dict, default=str)
         }
+        if order_canceled.side == Side.SELL:
+                pipeline.hincrby(f'cache:positions:{user_id}',ticker,order_canceled.number_of_shares)
+                pipeline.hincrby(f'cache:positions:{user_id}',f'locked_{ticker}', -order_canceled.number_of_shares)
+        elif order_canceled.side == Side.BUY:
+            safe_price = float(order_canceled.price)
+            total_price = safe_price * order_canceled.number_of_shares
+            pipeline.hincrbyfloat(f'cache:portfolio:{user_id}','available_cash', total_price)
+            pipeline.hincrbyfloat(f'cache:portfolio:{user_id}',f'locked_balance', -total_price)
+
+        pipeline.xadd(name="cancelled_order_stream", 
+                            fields=cancelled_trade_data, 
+                            maxlen=100000,
+                            approximate=True)
+            
+        await pipeline.execute()
+
+    return{
+        "message" : f'Order with id {order_id} was cancelled and funds are returned',
+        "status": status.HTTP_200_OK
+    }
 
             
 if __name__ == "__main__":
