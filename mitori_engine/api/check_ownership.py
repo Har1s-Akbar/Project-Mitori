@@ -21,4 +21,4 @@ def check_owner_ship(delete_order_uuid:str, ticker:str, user:AuthenticatedUser=D
     if str(object_to_be_delted.order_owner_id) != str(user.user_id):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="A user can only cancel the trade which belongs to his account")
 
-    return AuthenticatedUser
+    return user

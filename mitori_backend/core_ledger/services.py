@@ -1,7 +1,7 @@
 import  redis
 from core_ledger.models import Portfolio, Position
 
-redis_client = redis.Redis(host='localhost',port=6379,db=0,decode_responses=True)
+redis_client = redis.Redis(host='redis',port=6379,db=0,decode_responses=True)
 
 def redis_positions_portfolio_service(id:str):
     try:

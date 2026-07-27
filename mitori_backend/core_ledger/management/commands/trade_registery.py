@@ -12,7 +12,7 @@ class Command(BaseCommand):
 
     def handle(self, *args,**options):
 
-        redis_server = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+        redis_server = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
         stream_name = "executed_trades_stream"
         group_name = "django_workers"
         worker_name = "django_database_worker"

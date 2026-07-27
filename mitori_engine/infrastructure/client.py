@@ -7,7 +7,7 @@ load_dotenv()
 
 def create_redis_pool () -> BlockingConnectionPool:
     return BlockingConnectionPool(
-        host = os.getenv('REDIS_HOST', redis),
+        host = os.getenv('REDIS_HOST', 'redis'),
         port = os.getenv('REDIS_PORT',6379),
         db = 0,
         decode_responses=True,

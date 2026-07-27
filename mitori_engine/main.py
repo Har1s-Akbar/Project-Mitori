@@ -82,6 +82,9 @@ async def delete_order(order_id : str, ticker:str,redis_client : redis.Redis = D
     market = MARKET.get(ticker,None)
     order_canceled = market.tombstone_delete(order_id)
 
+    if not order_canceled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order does not exist")
+
     user_id = str(order_canceled.order_owner_id)
     pipeline = redis_client.pipeline()
     async with pipeline:
