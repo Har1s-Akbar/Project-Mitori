@@ -21,6 +21,7 @@ class Command(BaseCommand):
         stream_name = "executed_trades_stream"
         group_name = "django_workers"
         worker_name = "django_database_worker"
+        multiplier = settings.SYSTEM_PRECISION_MULTIPLIER
 
         try:
             redis_server.xgroup_create(name=stream_name,groupname=group_name,id=0,mkstream=True)
@@ -37,24 +38,16 @@ class Command(BaseCommand):
                         print(f"{stream_key} is stream key with message below")
                         for id , data in messages:
                             transaction_data = json.loads(data['data'])  
-                            price_str = transaction_data['price_setteled_at']
-                            price =   Decimal(price_str)
                             
-                            
-                            quantity_str = transaction_data['quantity']
-                            quantity = Decimal(quantity_str)
-
-
-                            price_locked_str = transaction_data['price_locked_by_user']
-                            price_locked = Decimal(price_locked_str)
-                            
+                            price = Decimal(str(transaction_data['price_setteled_at'])) / multiplier
+                            quantity = Decimal(str(transaction_data['quantity'])) /multiplier
+                            price_locked = Decimal(str(transaction_data['price_locked_by_user']))
                             
                             total = quantity* price
                             self.stdout.write(self.style.SUCCESS(f"Received Trade with ID {id} | ticker {transaction_data['ticker']}"))  
 
                             try:
                                 with transaction.atomic():
-
                                     if LedgerTransaction.objects.filter(stream_order_id=f'{id}_{TransactionType.SELL.value}').exists():
                                         self.stdout.write(self.style.ERROR(f"Trade already setteled , rejecting the duplicate stream message with id "))
                                         redis_server.xack(stream_name,group_name,id)
