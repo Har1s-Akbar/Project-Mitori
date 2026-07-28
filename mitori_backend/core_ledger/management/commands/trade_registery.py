@@ -6,13 +6,17 @@ from django.db import transaction, utils, IntegrityError
 from core_ledger.models import LedgerTransaction , Portfolio, TransactionType,Status, Position
 from decimal import Decimal
 from core_ledger.services import settle_cache
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class Command(BaseCommand):
     help = "Custom Daemon for registering trades in postgres"
 
     def handle(self, *args,**options):
 
-        redis_server = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
+        redis_server = redis.Redis(host=os.getenv('REDIS'), port=os.getenv('REDIS_PORT'), db=0, decode_responses=True)
         stream_name = "executed_trades_stream"
         group_name = "django_workers"
         worker_name = "django_database_worker"
