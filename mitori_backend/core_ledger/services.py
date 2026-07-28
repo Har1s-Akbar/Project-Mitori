@@ -2,6 +2,8 @@ import  redis
 from core_ledger.models import Portfolio, Position
 import os
 from dotenv import load_dotenv
+from decimal import Decimal
+from django.conf import settings
 
 load_dotenv()
 
@@ -14,12 +16,17 @@ def redis_positions_portfolio_service(id:str):
         user_position = Position.objects.filter(portfolio_id=user_portfolio.id, quantity__gt=0)
 
         portfolio_key = f"cache:portfolio:{id}"
-
         positions_key = f"cache:positions:{id}"
+
+        multiplier = Decimal(settings.SYSTEM_PRECISION_MULTIPLIER)
+
+        scaled_cash_balance = int(user_portfolio.cash_balance * multiplier)
+        
         with redis_client.pipeline() as pipeline:
             pipeline.delete(portfolio_key)
+
             portfolio_redis_dict ={
-                'available_cash':str(user_portfolio.cash_balance),
+                'available_cash':scaled_cash_balance,
                 'locked_balance':0
             }
             pipeline.hset(portfolio_key, mapping=portfolio_redis_dict)
@@ -29,7 +36,7 @@ def redis_positions_portfolio_service(id:str):
             if user_position.exists():
                 position_dict = {}
                 for pos in user_position:
-                    position_dict[pos.asset_symbol] = str(pos.quantity)
+                    position_dict[pos.asset_symbol] = int(pos.quantity * multiplier)
                     position_dict[f'locked_{pos.asset_symbol}'] = 0
                 
                 pipeline.hset(positions_key, mapping=position_dict)
@@ -48,21 +55,29 @@ def settle_cache(transaction_data, redis_server):
     buyer_cache = f"cache:portfolio:{buyer_id}"
     buyer_position_cache = f"cache:positions:{buyer_id}"
 
-    quantity = int(transaction_data['quantity'])
-    price_locked = float(transaction_data['price_locked_by_user'])
-    price_settled = float(transaction_data['price_setteled_at'])
+    multiplier = Decimal(settings.SYSTEM_PRECISION_MULTIPLIER)
 
-    total_locked = price_locked * quantity
-    total_settled = price_settled * quantity
+    quantity = Decimal(str(transaction_data['quantity']))
+    price_locked = Decimal(str(transaction_data['price_locked_by_user'])) 
+    price_settled = Decimal(str(transaction_data['price_setteled_at'])) 
+
+
+    total_locked = int(price_locked * quantity)
+    total_settled = int(price_settled * quantity)
     funds_remaining = total_locked - total_settled
 
-    redis_server.hincrbyfloat(seller_cache, f"locked_{ticker}", -quantity)
-    redis_server.hincrbyfloat(seller_cash_cache, 'available_cash', total_settled)
+    scaled_quantity = int(quantity * multiplier)
+    scaled_total_locked = int(total_locked * multiplier)
+    scaled_total_settled = int(total_settled * multiplier)
+    scaled_funds_remaining = int(funds_remaining * multiplier)
 
-    redis_server.hincrbyfloat(buyer_cache, 'locked_balance', -total_locked)
-    redis_server.hincrbyfloat(buyer_position_cache, ticker, quantity)
+    redis_server.hincrby(seller_cache, f"locked_{ticker}", -scaled_quantity)
+    redis_server.hincrby(seller_cash_cache, 'available_cash', scaled_total_settled)
+
+    redis_server.hincrby(buyer_cache, 'locked_balance', -scaled_total_locked)
+    redis_server.hincrby(buyer_position_cache, ticker, scaled_quantity)
 
     if funds_remaining > 0:
-        redis_server.hincrbyfloat(buyer_cache, 'available_cash', funds_remaining)
+        redis_server.hincrby(buyer_cache, 'available_cash', scaled_funds_remaining)
 
     print('finished running')

@@ -15,6 +15,9 @@ DEBUG = os.getenv('DJANGO_DEBUG' , 'False') == 'True'
 
 ALLOWED_HOSTS = []
 
+#for redis
+SYSTEM_PRECISION_MULTIPLIER = 100000000
+
 # Application definition
 
 INSTALLED_APPS = [

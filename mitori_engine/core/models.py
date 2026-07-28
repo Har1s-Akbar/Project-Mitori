@@ -13,7 +13,7 @@ class Order():
     ticker:str
     side:Side
     price:Decimal
-    number_of_shares:int
+    number_of_shares:Decimal
     order_owner_id : uuid.UUID
     is_canceled : bool
     date_time:str = field(default_factory=lambda: str(datetime.now()))
@@ -27,7 +27,7 @@ class Order():
 @dataclass(slots=True)
 class Trade():
     ticker:str
-    quantity:int
+    quantity:Decimal
     price_setteled_at:Decimal
     price_locked_by_user:Decimal
     buyer_id :uuid.UUID

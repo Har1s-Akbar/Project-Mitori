@@ -6,14 +6,15 @@ from django.utils import timezone
 class Portfolio(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL,
                                 on_delete=models.CASCADE)
-    cash_balance = models.DecimalField(max_digits=15,decimal_places=2 , default=Decimal(0.00))
+    cash_balance = models.DecimalField(max_digits=15,decimal_places=8 , default=Decimal(0.00))
     created_at = models.DateTimeField(default=timezone.now)
+
 
 class Position(models.Model):
     portfolio = models.ForeignKey(Portfolio, on_delete=models.CASCADE)
     asset_symbol = models.CharField(max_length=6, blank=False, null=False)
-    quantity = models.DecimalField(max_digits=10, decimal_places=2 , null=False, blank=False)
-    average_entry_price = models.DecimalField(max_digits=10, decimal_places=2, null=False , blank=False)
+    quantity = models.DecimalField(max_digits=10, decimal_places=8 , null=False, blank=False)
+    average_entry_price = models.DecimalField(max_digits=10, decimal_places=8, null=False , blank=False)
 
 
 class TransactionType(models.TextChoices):
@@ -32,9 +33,9 @@ class LedgerTransaction(models.Model):
     portfolio = models.ForeignKey(Portfolio, on_delete=models.CASCADE)
     stream_order_id = models.CharField(max_length=60, unique=True)
     transaction_type = models.CharField(max_length=10, choices=TransactionType.choices)
-    price_setteled_at = models.DecimalField(max_digits=15, decimal_places=2, null=False, blank=False)
-    price_locked_by_user = models.DecimalField(max_digits=15, decimal_places=2, null=False, blank=False,default=Decimal('0.00'))
-    quantity = models.DecimalField(max_digits=10, decimal_places=2 , null=False, blank=False, default=Decimal(0.00))
+    price_setteled_at = models.DecimalField(max_digits=15, decimal_places=8, null=False, blank=False)
+    price_locked_by_user = models.DecimalField(max_digits=15, decimal_places=8, null=False, blank=False,default=Decimal('0.00'))
+    quantity = models.DecimalField(max_digits=10, decimal_places=8 , null=False, blank=False, default=Decimal(0.00))
     status = models.CharField(max_length=10, choices=Status.choices, default = Status.PENDING)
     asset_symbol = models.CharField(max_length=8, blank=True, null=True)
     time_stamp = models.DateTimeField(auto_now_add=True)
@@ -42,8 +43,8 @@ class LedgerTransaction(models.Model):
 class CancelledOrders(models.Model):
     portfolio = models.ForeignKey(Portfolio, on_delete=models.CASCADE)
     transaction_type = models.CharField(max_length=10, choices=TransactionType.choices)
-    price_locked_by_user = models.DecimalField(max_digits=15, decimal_places=2, null=False, blank=False,default=Decimal('0.00'))
-    quantity = models.DecimalField(max_digits=10, decimal_places=2 , null=False, blank=False, default=Decimal(0.00))
+    price_locked_by_user = models.DecimalField(max_digits=15, decimal_places=8, null=False, blank=False,default=Decimal('0.00'))
+    quantity = models.DecimalField(max_digits=10, decimal_places=8 , null=False, blank=False, default=Decimal(0.00))
     status = models.CharField(max_length=10, choices=Status.choices, default = Status.PENDING)
     asset_symbol = models.CharField(max_length=8, blank=True, null=True)
     time_stamp = models.DateTimeField(auto_now_add=True)

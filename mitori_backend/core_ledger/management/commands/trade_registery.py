@@ -8,6 +8,7 @@ from decimal import Decimal
 from core_ledger.services import settle_cache
 import os
 from dotenv import load_dotenv
+from django.conf import settings
 
 load_dotenv()
 

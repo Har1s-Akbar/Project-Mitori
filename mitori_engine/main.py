@@ -13,6 +13,11 @@ import dataclasses
 from api.have_funds import have_funds
 from schemas.schema import MARKET, OrderReq
 from core.models import Order, Side
+import os
+from dotenv import load_dotenv
+from decimal import Decimal
+
+load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app:FastAPI):
@@ -78,7 +83,7 @@ async def place_order(order:OrderReq,
 async def delete_order(order_id : str, ticker:str,redis_client : redis.Redis = Depends(get_redis), 
                        current_user : AuthenticatedUser = Depends(check_owner_ship)):
 
-    
+    multiplier = Decimal(os.getenv('SYSTEM_PRECISION_MULTIPLIER'))
     market = MARKET.get(ticker,None)
     order_canceled = market.tombstone_delete(order_id)
 
@@ -94,13 +99,14 @@ async def delete_order(order_id : str, ticker:str,redis_client : redis.Redis = D
             "data": json.dumps(cancelled_trade_dict, default=str)
         }
         if order_canceled.side == Side.SELL:
-                pipeline.hincrby(f'cache:positions:{user_id}',ticker,order_canceled.number_of_shares)
-                pipeline.hincrby(f'cache:positions:{user_id}',f'locked_{ticker}', -order_canceled.number_of_shares)
+                number_of_shares_safe = int(order_canceled.number_of_shares * multiplier)
+                pipeline.hincrby(f'cache:positions:{user_id}',ticker,number_of_shares_safe)
+                pipeline.hincrby(f'cache:positions:{user_id}',f'locked_{ticker}', number_of_shares_safe)
         elif order_canceled.side == Side.BUY:
-            safe_price = float(order_canceled.price)
+            safe_price = order_canceled.price * multiplier
             total_price = safe_price * order_canceled.number_of_shares
-            pipeline.hincrbyfloat(f'cache:portfolio:{user_id}','available_cash', total_price)
-            pipeline.hincrbyfloat(f'cache:portfolio:{user_id}',f'locked_balance', -total_price)
+            pipeline.hincrby(f'cache:portfolio:{user_id}','available_cash', int(total_price))
+            pipeline.hincrby(f'cache:portfolio:{user_id}',f'locked_balance', -int(total_price))
 
         pipeline.xadd(name="cancelled_order_stream", 
                             fields=cancelled_trade_data, 

@@ -5,6 +5,10 @@ from schemas.schema import OrderReq, MARKET
 from decimal import Decimal
 import redis.exceptions as exp
 from typing import AsyncGenerator
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Authenticated) ,order:OrderReq=None )-> AsyncGenerator[AuthenticatedUser,None]:
 
@@ -17,10 +21,10 @@ async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Auth
     order_ticker = order.ticker
     order_user_id = user.user_id
 
-    safe_order_price = Decimal(order_price)
-    safe_order_quantity = Decimal(order_quantity)
-    total = safe_order_price*safe_order_quantity
-    safe_total_for_redis = str(total)
+    multiplier = Decimal(os.getenv('SYSTEM_PRECISION_MULTIPLIER'))
+
+    total = order_price*order_quantity * multiplier
+
 
     retry_counter = 3
 
@@ -33,18 +37,21 @@ async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Auth
                     await pipeline.watch(f'cache:portfolio:{order_user_id}')
                     available_cash = await pipeline.hget(f'cache:portfolio:{order_user_id}','available_cash')
                     locked_cash = await pipeline.hget(f'cache:portfolio:{order_user_id}','locked_balance')
-                    safe_available_cash = Decimal(available_cash or 0)
-                    safe_locked_cash = Decimal(locked_cash or 0)
+                    safe_available_cash = Decimal(str(available_cash or 0))
+                    safe_locked_cash = Decimal(str(locked_cash or 0))
+
+                    safe_sclaed_available_cash = safe_available_cash*multiplier
+                    safe_scaled_locked_cash = safe_locked_cash*multiplier
 
                     total = order_quantity*order_price
-                    if total > safe_available_cash:
+                    if total > safe_scaled_available_cash:
                         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Not enough funds available for this trade you have {safe_available_cash}")
                     else:
-                        safe_available_cash -= total
-                        safe_locked_cash += total
+                        safe_scaled_available_cash -= total
+                        safe_scaled_locked_cash += total
                         updates={
-                            'available_cash' : str(safe_available_cash),
-                            'locked_balance' : str(safe_locked_cash)
+                            'available_cash' : safe_sclaed_available_cash,
+                            'locked_balance' : safe_scaled_locked_cash
                         }
                         pipeline.multi()
                         pipeline.hset(f'cache:portfolio:{order_user_id}', mapping=updates)
@@ -55,17 +62,21 @@ async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Auth
                     available_shares = await pipeline.hget(f'cache:positions:{order_user_id}', order_ticker)
                     locked_shares = await pipeline.hget(f'cache:positions:{order_user_id}', f'locked_{order_ticker}')
 
-                    safe_available_shares = int(Decimal(available_shares or 0))
-                    safe_locked_shares = int(Decimal(locked_shares or 0))
-                    if order_quantity > safe_available_shares:
+                    safe_available_shares = Decimal(str(available_shares or 0))
+                    safe_locked_shares = Decimal(str(locked_shares or 0))
+
+                    safe_scaled_available_sahres = safe_available_shares*multiplier
+                    safe_scaled_locked_shares = safe_locked_shares*multiplier
+
+                    if (order_quantity*multiplier) > safe_available_shares:
                         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Not enough shares available for trade shares you have {safe_available_shares} with user id {order_user_id}")
                     else:
-                        safe_available_shares -= order_quantity
-                        safe_locked_shares += order_quantity
+                        safe_scaled_available_shares -= order_quantity*multiplier
+                        safe_scaled_locked_shares += order_quantity*multiplier
 
                         updates ={
-                            f'{order_ticker}' : safe_available_shares,
-                            f'locked_{order_ticker}' : safe_locked_shares, 
+                            f'{order_ticker}' : safe_scaled_available_shares,
+                            f'locked_{order_ticker}' : safe_scaled_locked_shares, 
                         }
                         pipeline.multi()
                         pipeline.hset(f'cache:positions:{order_user_id}', mapping=updates)
@@ -81,11 +92,12 @@ async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Auth
     except Exception as route_error:
         async with redis_connection_port.pipeline() as pipeline:
             if order_side == "sell":
-                pipeline.hincrby(f'cache:positions:{order_user_id}', order_ticker,order_quantity)
-                pipeline.hincrby(f'cache:positions:{order_user_id}', f'locked_{order_ticker}',-order_quantity)
+                
+                pipeline.hincrby(f'cache:positions:{order_user_id}', order_ticker,int(order_quantity*multiplier))
+                pipeline.hincrby(f'cache:positions:{order_user_id}', f'locked_{order_ticker}',-int(order_quantity*multiplier))
             if order_side =="buy":
-                pipeline.hincrbyfloat(f'cache:portfolio:{order_user_id}', 'available_cash', safe_total_for_redis)
-                pipeline.hincrbyfloat(f'cache:portfolio:{order_user_id}', 'locked_balance', -safe_total_for_redis)
+                pipeline.hincrbyfloat(f'cache:portfolio:{order_user_id}', 'available_cash', int(total))
+                pipeline.hincrbyfloat(f'cache:portfolio:{order_user_id}', 'locked_balance', -int(total))
 
             await pipeline.execute()
 
