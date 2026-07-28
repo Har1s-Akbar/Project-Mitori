@@ -82,7 +82,7 @@ async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Auth
         async with redis_connection_port.pipeline() as pipeline:
             if order_side == "sell":
                 pipeline.hincrby(f'cache:positions:{order_user_id}', order_ticker,order_quantity)
-                pipeline.hincrby(f'cache:positions:{order_user_id}', f'locked_order_ticker',-order_quantity)
+                pipeline.hincrby(f'cache:positions:{order_user_id}', f'locked_{order_ticker}',-order_quantity)
             if order_side =="buy":
                 pipeline.hincrbyfloat(f'cache:portfolio:{order_user_id}', 'available_cash', safe_total_for_redis)
                 pipeline.hincrbyfloat(f'cache:portfolio:{order_user_id}', 'locked_balance', -safe_total_for_redis)
