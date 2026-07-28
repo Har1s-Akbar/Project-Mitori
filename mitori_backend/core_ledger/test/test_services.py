@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 import uuid
 from core_ledger.models import Portfolio,Position,LedgerTransaction
 from django.utils import timezone
+from decimal import Decimal
 
 user = get_user_model()
 
@@ -95,3 +96,17 @@ class redis_positions_portfolio_test(TransactionTestCase):
         #If a user has an ongoing trade and for any reason he refreshes his/her browser or relogs in
         #That trade willl exist in the system but the cached funds/funds will be reinitialized giving him the funds that are available in the postgres
         #creating a really catastrophic bug more will be in readme
+
+    @patch('core_ledger.services.redis_client',test_redis_client)
+    def test_decimal_precision_in_database(self):
+
+        redis_positions_portfolio_service(self.trader.id)
+
+        portfolio_key = f'cache:portfolio:{self.trader.id}'
+        test_redis_client.hset(portfolio_key,'available_cash',0.0)
+
+        test_redis_client.hincrbyfloat(portfolio_key, 'available_cash',0.2)
+        test_redis_client.hincrbyfloat(portfolio_key,'available_cash',0.1)
+
+        get_cash = test_redis_client.hget(portfolio_key,'available_cash')
+        self.assertEqual(Decimal(get_cash), Decimal('0.3'))

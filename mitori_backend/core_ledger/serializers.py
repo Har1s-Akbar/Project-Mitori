@@ -18,17 +18,5 @@ class LedgerTransactionSerializer(serializers.ModelSerializer):
 
         model = LedgerTransaction
 
-        fields = ['portfolio','id','transaction_type','amount','status','asset_symbol', 'time_stamp']
-        read_only_fields=['id','time_stamp','status']
-
-    def validate(self,data):
-        transaction_type = data.transaction_type
-        amount = data.amount
-
-        request = self.context.get('request')
-        portfolio = request.user.portfolio
-
-        if transaction_type == 'BUY':
-            if portfolio.cash_balance < amount:
-                raise serializers.ValidationError("Insufficient trades for this fund")
-            return data
+        fields = ['portfolio','stream_order_id','transaction_type','quantity','status','asset_symbol', 'time_stamp', 'price_setteled_at', 'price_locked_by_user']
+        

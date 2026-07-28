@@ -51,5 +51,3 @@ class MyUser(PermissionsMixin, AbstractBaseUser):
     objects = MyUserManager()
     def __str__(self):
             return self.email
-
-        
