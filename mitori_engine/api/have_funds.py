@@ -85,7 +85,7 @@ async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Auth
                 pipeline.hincrby(f'cache:positions:{order_user_id}', f'locked_{order_ticker}',-int(order_quantity*multiplier))
             if order_side =="buy":
                 pipeline.hincrby(f'cache:portfolio:{order_user_id}', 'available_cash',total)
-                pipeline.hincrby(f'cache:portfolio:{order_user_id}', 'locked_balance', total)
+                pipeline.hincrby(f'cache:portfolio:{order_user_id}', 'locked_balance', -total)
 
             await pipeline.execute()
 

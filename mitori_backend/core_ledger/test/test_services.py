@@ -1,12 +1,13 @@
 import redis
 from django.test import TransactionTestCase
 from unittest.mock import patch
-from core_ledger.services import redis_positions_portfolio_service
+from core_ledger.services import redis_positions_portfolio_service, settle_cache
 from django.contrib.auth import get_user_model
 import uuid
 from core_ledger.models import Portfolio,Position,LedgerTransaction
 from django.utils import timezone
 from decimal import Decimal
+from django.conf import settings
 
 user = get_user_model()
 
@@ -21,6 +22,7 @@ class redis_positions_portfolio_test(TransactionTestCase):
     def setUp(self):
         test_redis_client.flushdb()
 
+        self.multiplier = Decimal(settings.SYSTEM_PRECISION_MULTIPLIER)
         self.trader =  user.objects.create(id=uuid.uuid4(), email="trader@gmail.com", date_of_birth="1999-09-08", full_name="tarder",
                                               is_kyc_verified="True")
         # self.portfolio_of_trader = Portfolio.objects.create(user=self.trader,cash_balance=10000.00)
@@ -34,8 +36,11 @@ class redis_positions_portfolio_test(TransactionTestCase):
         portfolio_key = f'cache:portfolio:{self.trader.id}'
         cached_cash = test_redis_client.hget(portfolio_key,'available_cash')
         cached_locked_cash = test_redis_client.hget(portfolio_key,'locked_balance')
-        self.assertEqual(float(cached_cash),10000.00)
-        self.assertEqual(float(cached_locked_cash),0.00)
+
+        safe_cached_cash = Decimal(str(cached_cash))/self.multiplier
+
+        self.assertEqual(safe_cached_cash,10000.00000)
+        self.assertEqual(int(cached_locked_cash),0)
 
         positions_key = f'cache:positions:{self.trader.id}'
         positions_exits = test_redis_client.exists(positions_key)
@@ -43,7 +48,7 @@ class redis_positions_portfolio_test(TransactionTestCase):
         self.assertEqual(positions_exits,0)
 
     @patch('core_ledger.services.redis_client',test_redis_client)
-    def test_cache_initialization_redis_with__positions(self):
+    def test_cache_initialization_redis_with_positions(self):
         get_trader_instance = Portfolio.objects.get(user_id=self.trader)
         Position.objects.create(portfolio=get_trader_instance,asset_symbol='APP',quantity=130,average_entry_price=160.00)
         Position.objects.create(portfolio=get_trader_instance,asset_symbol='TSLA',quantity=50,average_entry_price=90.00)
@@ -57,14 +62,19 @@ class redis_positions_portfolio_test(TransactionTestCase):
         cached_cash = test_redis_client.hget(portfolio_key,'available_cash')
         cached_locked_cash = test_redis_client.hget(portfolio_key,'locked_balance')
 
-        self.assertEqual(float(cached_locked_cash),0.00)
-        self.assertEqual(float(cached_cash),10000.00)
+        safe_cached_cash = Decimal(str(cached_cash))/self.multiplier
+
+        self.assertEqual(safe_cached_cash,10000)
+        self.assertEqual(int(cached_locked_cash),0)
 
         cached_position_APP = test_redis_client.hget(postions_key,'APP')
         cached_position_TSLA = test_redis_client.hget(postions_key,'TSLA')
 
-        self.assertEqual(float(cached_position_APP),130.00)
-        self.assertEqual(float(cached_position_TSLA),50.00)
+        safe_cache_position_APP = Decimal(str(cached_position_APP))/self.multiplier
+        safe_cache_position_TSLA = Decimal(str(cached_position_TSLA))/self.multiplier
+
+        self.assertEqual(safe_cache_position_APP,130.00)
+        self.assertEqual(safe_cache_position_TSLA,50.00)
 
     @patch('core_ledger.services.redis_client',test_redis_client)
     def test_cache_initialization_for_relogin(self):
@@ -110,3 +120,78 @@ class redis_positions_portfolio_test(TransactionTestCase):
 
         get_cash = test_redis_client.hget(portfolio_key,'available_cash')
         self.assertEqual(Decimal(get_cash), Decimal('0.3'))
+
+
+
+class redis_cache_setlement_test(TransactionTestCase):
+    def setUp(self):
+        test_redis_client.flushdb()
+
+        self.trader = user.objects.create(id=uuid.uuid4(), email="trader@gmail.com", date_of_birth="1999-09-08", full_name="tarder",
+                                              is_kyc_verified="True")
+        self.trader1 = user.objects.create(id=uuid.uuid4(),email="trader1@gmail.com", date_of_birth="1999-09-08", full_name="tarder",
+                                              is_kyc_verified="True")
+
+        self.portfolio_of_trader = Portfolio.objects.get(user=self.trader.id)
+        self.portfolio_of_trader1 = Portfolio.objects.get(user=self.trader1.id)
+
+        self.traderCacheKey_portfolio = f'cache:portfolio:{self.trader.id}'
+        self.traderCacheKey_positions = f'cache:positions:{self.trader.id}'
+
+        self.trader1CacheKey_portfolio = f'cache:portfolio:{self.trader1.id}'
+        self.trader1CacheKey_positions = f'cache:positions:{self.trader1.id}'
+
+        Position.objects.create(portfolio=self.portfolio_of_trader, asset_symbol='APP',quantity=Decimal('200.000000'), average_entry_price=Decimal('200.000000'))
+        Position.objects.create(portfolio=self.portfolio_of_trader1, asset_symbol='TSLA',quantity=Decimal('200.000000'), average_entry_price=Decimal('200.000000'))
+
+        # self.get_position_trader = Portfolio.objects.get(portfolio=self.portfolio_of_trader , asset_symbol='APP')
+        # self.get_position_trader1 = Portfolio.objects.get(portfolio=self.portfolio_of_trader1 , asset_symbol='TSLA')
+        self.multiplier = Decimal(settings.SYSTEM_PRECISION_MULTIPLIER)
+        safe_quantity = Decimal("150.00000000")  * self.multiplier
+        safe_price_locked_by_user = Decimal("8.00000000") * self.multiplier
+        safe_price_settled_at = Decimal("6.00000000") * self.multiplier
+
+        self.transaction_data = {
+            'ticker':'APP',
+            'seller_id': str(self.trader),
+            'buyer_id':str(self.trader1),
+            'quantity':int(safe_quantity),
+            'price_locked_by_user':int(safe_price_locked_by_user),
+            'price_setteled_at':int(safe_price_settled_at)
+        }
+
+    @patch('core_ledger.services.redis_client',test_redis_client)
+    def test_proper_cache_for_buyer(self):
+        redis_positions_portfolio_service(self.trader.id)
+        redis_positions_portfolio_service(self.trader1.id)
+
+        total = (self.transaction_data['quantity']/self.multiplier)  * self.transaction_data['price_locked_by_user']/self.multiplier
+
+        update_portfolio_value ={
+            'available_cash': int((self.portfolio_of_trader.cash_balance -total)*self.multiplier),
+            'locked_balance': int(total * self.multiplier)
+        }
+
+        # safe_total_shares = self.get_position_trader.quantity * self.multiplier
+
+        # update_buyer_value = {
+        #     'APP': safe_total_shares - self.transaction_data['quantity'],
+        #     'locked_APP' : self.traderCacheKey_portfolio_data['quantity']
+        # }
+
+        test_redis_client.hset(self.trader1CacheKey_positions, mapping=update_portfolio_value)
+        # test_redis_client.hset(self.traderCacheKey_portfolio, mapping=update_seller_value)
+
+        settle_cache(self.transaction_data,test_redis_client)
+
+        get_buy_trader_cache_shares = test_redis_client.hget(self.trader1CacheKey_positions,'APP')
+        get_buy_trader_cache_locked_shares = test_redis_client.hget(self.trader1CacheKey_positions,'locked_APP')
+
+        # get_buy_trader_available_cash =  test_redis_client.hget(self.trader1CacheKey_portfolio,'available_cash')
+        # get_buy_trader_locked_cash =  test_redis_client.hget(self.trader1CacheKey_portfolio,'available_cash')
+
+        safe_get_buy_trader_cache_shares = Decimal(str(get_buy_trader_cache_shares))/self.multiplier
+        safe_get_buy_trader_locked_shares = Decimal(str(get_buy_trader_cache_locked_shares))/self.multiplier
+
+        self.assertEqual(safe_get_buy_trader_cache_shares, Decimal(str(150.00000000)))
+        self.assertEqual(safe_get_buy_trader_locked_shares, Decimal(str(0.00000000)))
