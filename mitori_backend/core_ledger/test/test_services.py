@@ -144,8 +144,6 @@ class redis_cache_setlement_test(TransactionTestCase):
         Position.objects.create(portfolio=self.portfolio_of_trader, asset_symbol='APP',quantity=Decimal('200.000000'), average_entry_price=Decimal('200.000000'))
         Position.objects.create(portfolio=self.portfolio_of_trader1, asset_symbol='TSLA',quantity=Decimal('200.000000'), average_entry_price=Decimal('200.000000'))
 
-        # self.get_position_trader = Portfolio.objects.get(portfolio=self.portfolio_of_trader , asset_symbol='APP')
-        # self.get_position_trader1 = Portfolio.objects.get(portfolio=self.portfolio_of_trader1 , asset_symbol='TSLA')
         self.multiplier = Decimal(settings.SYSTEM_PRECISION_MULTIPLIER)
         safe_quantity = Decimal("150.00000000")  * self.multiplier
         safe_price_locked_by_user = Decimal("8.00000000") * self.multiplier
@@ -172,26 +170,15 @@ class redis_cache_setlement_test(TransactionTestCase):
             'locked_balance': int(total * self.multiplier)
         }
 
-        # safe_total_shares = self.get_position_trader.quantity * self.multiplier
-
-        # update_buyer_value = {
-        #     'APP': safe_total_shares - self.transaction_data['quantity'],
-        #     'locked_APP' : self.traderCacheKey_portfolio_data['quantity']
-        # }
-
-        test_redis_client.hset(self.trader1CacheKey_positions, mapping=update_portfolio_value)
-        # test_redis_client.hset(self.traderCacheKey_portfolio, mapping=update_seller_value)
+        test_redis_client.hset(self.trader1CacheKey_portfolio, mapping=update_portfolio_value)
 
         settle_cache(self.transaction_data,test_redis_client)
 
-        get_buy_trader_cache_shares = test_redis_client.hget(self.trader1CacheKey_positions,'APP')
-        get_buy_trader_cache_locked_shares = test_redis_client.hget(self.trader1CacheKey_positions,'locked_APP')
-
-        # get_buy_trader_available_cash =  test_redis_client.hget(self.trader1CacheKey_portfolio,'available_cash')
-        # get_buy_trader_locked_cash =  test_redis_client.hget(self.trader1CacheKey_portfolio,'available_cash')
+        get_buy_trader_cache_shares = test_redis_client.hget(self.trader1CacheKey_portfolio,'available_cash')
+        get_buy_trader_cache_locked_shares = test_redis_client.hget(self.trader1CacheKey_portfolio  ,'locked_balance')
 
         safe_get_buy_trader_cache_shares = Decimal(str(get_buy_trader_cache_shares))/self.multiplier
         safe_get_buy_trader_locked_shares = Decimal(str(get_buy_trader_cache_locked_shares))/self.multiplier
 
-        self.assertEqual(safe_get_buy_trader_cache_shares, Decimal(str(150.00000000)))
-        self.assertEqual(safe_get_buy_trader_locked_shares, Decimal(str(0.00000000)))
+        self.assertEqual(safe_get_buy_trader_cache_shares, Decimal(str(9100)))
+        self.assertEqual(safe_get_buy_trader_locked_shares, Decimal(str(900)))
