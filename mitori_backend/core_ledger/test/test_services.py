@@ -151,8 +151,8 @@ class redis_cache_setlement_test(TransactionTestCase):
 
         self.transaction_data = {
             'ticker':'APP',
-            'seller_id': str(self.trader),
-            'buyer_id':str(self.trader1),
+            'seller_id': str(self.trader.id),
+            'buyer_id':str(self.trader1.id),
             'quantity':int(safe_quantity),
             'price_locked_by_user':int(safe_price_locked_by_user),
             'price_setteled_at':int(safe_price_settled_at)
@@ -166,19 +166,56 @@ class redis_cache_setlement_test(TransactionTestCase):
         total = (self.transaction_data['quantity']/self.multiplier)  * self.transaction_data['price_locked_by_user']/self.multiplier
 
         update_portfolio_value ={
-            'available_cash': int((self.portfolio_of_trader.cash_balance -total)*self.multiplier),
+            'available_cash': int((self.portfolio_of_trader1.cash_balance -total)*self.multiplier),
             'locked_balance': int(total * self.multiplier)
         }
 
+        total_shares_in_portfolio = Position.objects.get(portfolio=self.portfolio_of_trader, asset_symbol='APP')
+        safe_total_shares_in_portfolio = int(total_shares_in_portfolio.quantity * self.multiplier)
+        update_position_value = {
+            'APP': safe_total_shares_in_portfolio-self.transaction_data['quantity'],
+            'locked_APP':self.transaction_data['quantity']
+        }
+        test_redis_client.hset(self.traderCacheKey_positions, mapping=update_position_value)
         test_redis_client.hset(self.trader1CacheKey_portfolio, mapping=update_portfolio_value)
 
         settle_cache(self.transaction_data,test_redis_client)
 
-        get_buy_trader_cache_shares = test_redis_client.hget(self.trader1CacheKey_portfolio,'available_cash')
-        get_buy_trader_cache_locked_shares = test_redis_client.hget(self.trader1CacheKey_portfolio  ,'locked_balance')
+        #Buyer portion testing the buyer portfolio and positions
+        get_buy_trader_cache_portfolio = test_redis_client.hget(self.trader1CacheKey_portfolio,'available_cash')
+        get_buy_trader_cache_locked_portfolio = test_redis_client.hget(self.trader1CacheKey_portfolio  ,'locked_balance')
 
-        safe_get_buy_trader_cache_shares = Decimal(str(get_buy_trader_cache_shares))/self.multiplier
-        safe_get_buy_trader_locked_shares = Decimal(str(get_buy_trader_cache_locked_shares))/self.multiplier
+        get_buy_trader_cache_positions = test_redis_client.hget(self.trader1CacheKey_positions,'APP')
+        get_buy_trader_cache_locked_positions = test_redis_client.hget(self.trader1CacheKey_positions,'locked_APP')
 
-        self.assertEqual(safe_get_buy_trader_cache_shares, Decimal(str(9100)))
-        self.assertEqual(safe_get_buy_trader_locked_shares, Decimal(str(900)))
+        safe_get_buy_trader_cache_positions = Decimal(str(get_buy_trader_cache_positions))/self.multiplier
+
+        safe_get_buy_trader_cache_locked_positions = Decimal(str(get_buy_trader_cache_locked_positions or 0))/self.multiplier
+
+        safe_get_buy_trader_cache_portfolio = Decimal(str(get_buy_trader_cache_portfolio))/self.multiplier
+        safe_get_buy_trader_locked_portfolio = Decimal(str(get_buy_trader_cache_locked_portfolio))/self.multiplier
+
+        self.assertEqual(safe_get_buy_trader_cache_portfolio, Decimal(str(9100)))
+        self.assertEqual(safe_get_buy_trader_locked_portfolio, Decimal(str(0)))
+
+        self.assertEqual(safe_get_buy_trader_cache_positions,Decimal(str(150)))
+        self.assertEqual(safe_get_buy_trader_cache_locked_positions,Decimal(str(0)))
+
+        #Testing Seller portfolio and seller positions
+        get_seller_cache_position = test_redis_client.hget(self.traderCacheKey_positions, 'APP')
+        get_seller_cache_locked_position = test_redis_client.hget(self.traderCacheKey_positions, 'locked_APP')
+
+        get_seller_cache_portfolio = test_redis_client.hget(self.traderCacheKey_portfolio, 'available_cash')
+        get_seller_cache_locked_portfolio = test_redis_client.hget(self.traderCacheKey_portfolio,'locked_balance')
+
+        safe_get_seller_cache_position = Decimal(str(get_seller_cache_position))/self.multiplier
+        safe_get_seller_cache_locked_position = Decimal(str(get_seller_cache_locked_position))/self.multiplier
+
+        safe_get_seller_cache_portfolio = Decimal(str(get_seller_cache_portfolio))/self.multiplier
+        safe_get_seller_cache_locked_portfolio = Decimal(str(get_seller_cache_locked_portfolio or 0))/self.multiplier
+
+        self.assertEqual(safe_get_seller_cache_position,Decimal(str(50)))
+        self.assertEqual(safe_get_seller_cache_locked_position,0)
+
+        self.assertEqual(safe_get_seller_cache_portfolio,Decimal(str(10900)))
+        self.assertEqual(safe_get_seller_cache_locked_portfolio, Decimal(str(0)))

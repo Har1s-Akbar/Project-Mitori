@@ -48,10 +48,12 @@ def redis_positions_portfolio_service(id:str):
 def settle_cache(transaction_data, redis_server):
     ticker = transaction_data['ticker']
     seller_id = transaction_data['seller_id']
+    
     seller_cache = f"cache:positions:{seller_id}"
     seller_cash_cache = f"cache:portfolio:{seller_id}"
 
     buyer_id = transaction_data['buyer_id']
+
     buyer_cache = f"cache:portfolio:{buyer_id}"
     buyer_position_cache = f"cache:positions:{buyer_id}"
 
