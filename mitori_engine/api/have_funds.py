@@ -41,7 +41,7 @@ async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Auth
                     safe_locked_cash = Decimal(str(locked_cash or 0))
 
                     if total > safe_available_cash:
-                        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Not enough funds available for this trade you have {safe_available_cash}")
+                        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Not enough funds available for this trade you have {safe_available_cash/multiplier}")
                     else:
                         updates={
                             'available_cash' : safe_available_cash-total,
@@ -60,8 +60,8 @@ async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Auth
                     safe_locked_shares = Decimal(str(locked_shares or 0))
                     order_quantity_scaled = order_quantity*multiplier
 
-                    if order_quantity_scaled > safe_locked_shares:
-                        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Not enough shares available for trade shares you have {safe_available_shares} with user id {order_user_id}")
+                    if order_quantity_scaled > safe_available_shares:
+                        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Not enough shares available for trade shares you have {safe_available_shares} with user id {order_user_id/multiplier}")
                     else:
                         updates ={
                             f'{order_ticker}' : safe_available_shares-order_quantity_scaled,
@@ -84,8 +84,8 @@ async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Auth
                 pipeline.hincrby(f'cache:positions:{order_user_id}', order_ticker,int(order_quantity*multiplier))
                 pipeline.hincrby(f'cache:positions:{order_user_id}', f'locked_{order_ticker}',-int(order_quantity*multiplier))
             if order_side =="buy":
-                pipeline.hincrby(f'cache:portfolio:{order_user_id}', 'available_cash', int(total*multiplier))
-                pipeline.hincrby(f'cache:portfolio:{order_user_id}', 'locked_balance', -int(total*multiplier))
+                pipeline.hincrby(f'cache:portfolio:{order_user_id}', 'available_cash',total)
+                pipeline.hincrby(f'cache:portfolio:{order_user_id}', 'locked_balance', total)
 
             await pipeline.execute()
 

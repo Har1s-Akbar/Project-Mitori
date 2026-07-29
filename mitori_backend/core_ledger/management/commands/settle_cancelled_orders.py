@@ -16,7 +16,7 @@ class Command(BaseCommand):
     help = "Custom Daemon for settlement of cancelled orders"
 
     def handle(self, *args, **options):
-        redis_server = redis.Redis(host=os.getenv('REDIS'),port=os.getenv('RREDIS_PORT'), db=0, decode_responses=True)
+        redis_server = redis.Redis(host=os.getenv('REDIS'),port=os.getenv('REDIS_PORT'), db=0, decode_responses=True)
         stream_name = "cancelled_order_stream"
         group_name = "django_cancel_workers"
         worker_name = "django_database_worker"
