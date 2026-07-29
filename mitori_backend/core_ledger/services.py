@@ -62,8 +62,8 @@ def settle_cache(transaction_data, redis_server):
     price_settled = Decimal(str(transaction_data['price_setteled_at'])) 
 
 
-    total_locked = int(price_locked * quantity)
-    total_settled = int(price_settled * quantity)
+    total_locked = price_locked * quantity
+    total_settled = price_settled * quantity
     funds_remaining = total_locked - total_settled
 
     scaled_quantity = int(quantity * multiplier)

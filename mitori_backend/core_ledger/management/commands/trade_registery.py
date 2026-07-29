@@ -39,11 +39,11 @@ class Command(BaseCommand):
                         for id , data in messages:
                             transaction_data = json.loads(data['data'])  
                             
-                            price = Decimal(str(transaction_data['price_setteled_at'])) / multiplier
-                            quantity = Decimal(str(transaction_data['quantity'])) /multiplier
-                            price_locked = Decimal(str(transaction_data['price_locked_by_user']))
+                            price_scaled_down = Decimal(str(transaction_data['price_setteled_at'])) / multiplier
+                            quantity_scaled_down = Decimal(str(transaction_data['quantity'])) /multiplier
+                            price_locked = Decimal(str(transaction_data['price_locked_by_user'])) / multiplier
                             
-                            total = quantity* price
+                            total = quantity_scaled_down* price_scaled_down
                             self.stdout.write(self.style.SUCCESS(f"Received Trade with ID {id} | ticker {transaction_data['ticker']}"))  
 
                             try:
@@ -62,28 +62,28 @@ class Command(BaseCommand):
                                         seller_portfolio.save()
 
                                         seller_position = Position.objects.select_for_update().get(portfolio=seller_portfolio, asset_symbol = transaction_data['ticker'])
-                                        seller_position.quantity -= quantity
+                                        seller_position.quantity -= quantity_scaled_down
                                         seller_position.save()
 
                                         try:
                                             buyer_position = Position.objects.select_for_update().get(portfolio=buyer_portfolio,asset_symbol =transaction_data['ticker'])
-                                            buyer_position.quantity += quantity
+                                            buyer_position.quantity += quantity_scaled_down
 
-                                            buyer_position.average_entry_price = (buyer_position.average_entry_price*buyer_position.quantity + price_locked*quantity)/(buyer_position.quantity+quantity)
+                                            buyer_position.average_entry_price = (buyer_position.average_entry_price*buyer_position.quantity + price_locked*quantity_scaled_down)/(buyer_position.quantity+quantity_scaled_down)
                                             buyer_position.save()
                                         except Position.DoesNotExist:
                                             Position.objects.create(
                                                 portfolio=buyer_portfolio,
                                                 asset_symbol=transaction_data['ticker'],
-                                                quantity=quantity,
+                                                quantity=quantity_scaled_down,
                                                 average_entry_price=price_locked
                                             )
                                         LedgerTransaction.objects.create(portfolio = buyer_portfolio,
                                                                         stream_order_id = f'{id}_{TransactionType.BUY.value}',
                                                                         transaction_type=TransactionType.BUY,
-                                                                        price_setteled_at=transaction_data['price_setteled_at'],
-                                                                        price_locked_by_user = transaction_data['price_locked_by_user'],
-                                                                        quantity=transaction_data['quantity'],
+                                                                        price_setteled_at=price_scaled_down,
+                                                                        price_locked_by_user = price_locked,
+                                                                        quantity=quantity_scaled_down,
                                                                         status=Status.COMPLETED,
                                                                         asset_symbol=transaction_data['ticker']
                                                                         )
@@ -91,9 +91,9 @@ class Command(BaseCommand):
                                         LedgerTransaction.objects.create(portfolio = seller_portfolio,
                                                                         stream_order_id = f'{id}_{TransactionType.SELL.value}',
                                                                         transaction_type=TransactionType.SELL,
-                                                                        price_setteled_at=transaction_data['price_setteled_at'],
-                                                                        price_locked_by_user = transaction_data['price_locked_by_user'],
-                                                                        quantity=transaction_data['quantity'],
+                                                                        price_setteled_at=price_scaled_down,
+                                                                        price_locked_by_user = price_locked,
+                                                                        quantity=quantity_scaled_down,
                                                                         status=Status.COMPLETED,
                                                                         asset_symbol=transaction_data['ticker']
                                                                         )

@@ -42,12 +42,16 @@ async def place_order(order:OrderReq,
                       ,current_user : AuthenticatedUser=Depends(have_funds)):
 
     target_book = MARKET[order.ticker]
+    multiplier = Decimal(os.getenv('SYSTEM_PRECISION_MULTIPLIER'))
+
+    price_scaled_up = int(order.price* multiplier)
+    shares_scaled_up = int(order.number_of_shares * multiplier)
 
     new_order = Order(
         ticker =  order.ticker,
         side = order.side,
-        price = order.price,
-        number_of_shares = order.number_of_shares,
+        price = price_scaled_up,
+        number_of_shares = shares_scaled_up,
         order_owner_id = uuid.UUID(current_user.user_id),
         is_canceled=False,
     )
