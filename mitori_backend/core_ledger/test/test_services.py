@@ -292,3 +292,134 @@ class redis_cache_setlement_test(TransactionTestCase):
 
         self.assertEqual(safe_get_seller_cache_portfolio,Decimal(str(11200)))
         self.assertEqual(safe_get_seller_cache_locked_portfolio, Decimal(str(0)))
+    @patch('core_ledger.services.redis_client', test_redis_client)
+    def test_cumulative_partial_fills_for_single_order(self):
+        """
+        Tests that a single large order (150 shares locked at $8) 
+        can be correctly settled in multiple smaller chunks (100 shares @ $6, then 50 shares @ $7).
+        """
+        redis_positions_portfolio_service(self.trader.id)
+        redis_positions_portfolio_service(self.trader1.id)
+
+        # 1. THE INITIAL LOCK (Buyer locks 150 shares @ $8 = $1200)
+        total_lock_amount = Decimal("150") * Decimal("8")
+        update_portfolio_value = {
+            'available_cash': int((self.portfolio_of_trader1.cash_balance - total_lock_amount) * self.multiplier),
+            'locked_balance': int(total_lock_amount * self.multiplier)
+        }
+        
+        # (Seller locks 150 shares of APP)
+        total_shares = Position.objects.get(portfolio=self.portfolio_of_trader, asset_symbol='APP').quantity
+        update_position_value = {
+            'APP': int((total_shares - Decimal("150")) * self.multiplier),
+            'locked_APP': int(Decimal("150") * self.multiplier)
+        }
+        
+        test_redis_client.hset(self.trader1CacheKey_portfolio, mapping=update_portfolio_value)
+        test_redis_client.hset(self.traderCacheKey_positions, mapping=update_position_value)
+
+        # 2. FILL ONE: 100 shares settle at $6
+        fill_1 = {
+            'ticker': 'APP', 'seller_id': str(self.trader.id), 'buyer_id': str(self.trader1.id),
+            'quantity': int(Decimal("100") * self.multiplier),
+            'price_locked_by_user': int(Decimal("8") * self.multiplier),
+            'price_setteled_at': int(Decimal("6") * self.multiplier)
+        }
+        
+        # 3. FILL TWO: The remaining 50 shares settle worse, at $7
+        fill_2 = {
+            'ticker': 'APP', 'seller_id': str(self.trader.id), 'buyer_id': str(self.trader1.id),
+            'quantity': int(Decimal("50") * self.multiplier),
+            'price_locked_by_user': int(Decimal("8") * self.multiplier),
+            'price_setteled_at': int(Decimal("7") * self.multiplier)
+        }
+
+        # 4. EXECUTE BOTH SEQUENTIALLY
+        settle_cache(fill_1, test_redis_client)
+        settle_cache(fill_2, test_redis_client)
+
+        # 5. FETCH & PARSE BUYER STATE
+        buyer_cash = Decimal(str(test_redis_client.hget(self.trader1CacheKey_portfolio, 'available_cash') or 0)) / self.multiplier
+        buyer_locked = Decimal(str(test_redis_client.hget(self.trader1CacheKey_portfolio, 'locked_balance') or 0)) / self.multiplier
+        buyer_shares = Decimal(str(test_redis_client.hget(self.trader1CacheKey_positions, 'APP') or 0)) / self.multiplier
+
+        # Assertions: 
+        # Total cost = (100 * $6) + (50 * $7) = $600 + $350 = $950. 
+        # Refund = $1200 (lock) - $950 = $250.
+        # Buyer Cash: 10000 - 1200 + 250 = 9050
+        self.assertEqual(buyer_cash, Decimal("9050.00"))
+        self.assertEqual(buyer_locked, Decimal("0.00"))
+        self.assertEqual(buyer_shares, Decimal("150.00"))
+
+    @patch('core_ledger.services.redis_client', test_redis_client)
+    def test_idempotency_vulnerability_of_settle_cache(self):
+        """
+        DOCUMENTATION TEST: Proves `settle_cache` does NOT have internal idempotency.
+        If the stream consumer accidentally passes the same trade twice, the cache 
+        will double-apply the settlement, corrupting the ledger.
+        Idempotency MUST be enforced by checking PostgreSQL LedgerTransaction IDs upstream.
+        """
+        redis_positions_portfolio_service(self.trader.id)
+        redis_positions_portfolio_service(self.trader1.id)
+
+        # Setup standard locks (Buyer $1200 cash, Seller 150 shares)
+        total_lock = Decimal("1200")
+        test_redis_client.hset(self.trader1CacheKey_portfolio, mapping={
+            'available_cash': int((self.portfolio_of_trader1.cash_balance - total_lock) * self.multiplier),
+            'locked_balance': int(total_lock * self.multiplier)
+        })
+        test_redis_client.hset(self.traderCacheKey_positions, mapping={
+            'APP': int((Decimal("200") - Decimal("150")) * self.multiplier),
+            'locked_APP': int(Decimal("150") * self.multiplier)
+        })
+
+        # ACT: Call the EXACT same transaction twice (simulating a Redis stream at-least-once delivery duplicate)
+        settle_cache(self.transaction_data, test_redis_client)
+        settle_cache(self.transaction_data, test_redis_client)
+
+        # FETCH & PARSE
+        buyer_locked = Decimal(str(test_redis_client.hget(self.trader1CacheKey_portfolio, 'locked_balance') or 0)) / self.multiplier
+        buyer_shares = Decimal(str(test_redis_client.hget(self.trader1CacheKey_positions, 'APP') or 0)) / self.multiplier
+
+        # ASSERT: The bug is explicitly caught and verified here.
+        # Buyer should only have 150 shares, but they got 300.
+        self.assertEqual(buyer_shares, Decimal("300.00"))
+        # Locked balance was deducted by $1200 twice, driving it deep into the negative.
+        self.assertEqual(buyer_locked, Decimal("-1200.00"))
+
+    @patch('core_ledger.services.redis_client', test_redis_client)
+    def test_defensive_behavior_on_negative_slippage(self):
+        """
+        Tests engine behavior if a trade settles worse than the locked limit price.
+        Currently, `settle_cache` silently absorbs the shortfall to prevent the buyer's 
+        available cash from going negative, dropping the difference entirely.
+        """
+        redis_positions_portfolio_service(self.trader.id)
+        redis_positions_portfolio_service(self.trader1.id)
+
+        # Lock $1200 (150 shares @ $8)
+        total_lock = Decimal("1200")
+        test_redis_client.hset(self.trader1CacheKey_portfolio, mapping={
+            'available_cash': int((self.portfolio_of_trader1.cash_balance - total_lock) * self.multiplier),
+            'locked_balance': int(total_lock * self.multiplier)
+        })
+
+        # BAD TRANSACTION: Settled at $10 (Total cost $1500, which is $300 MORE than the lock)
+        bad_transaction_data = self.transaction_data.copy()
+        bad_transaction_data['price_setteled_at'] = int(Decimal("10.00000000") * self.multiplier)
+
+        # ACT
+        settle_cache(bad_transaction_data, test_redis_client)
+
+        # FETCH & PARSE
+        buyer_cash = Decimal(str(test_redis_client.hget(self.trader1CacheKey_portfolio, 'available_cash') or 0)) / self.multiplier
+        buyer_locked = Decimal(str(test_redis_client.hget(self.trader1CacheKey_portfolio, 'locked_balance') or 0)) / self.multiplier
+
+        # ASSERT:
+        # The locked balance was zeroed out completely (1200 - 1500 = -300, but logic just subtracts total_locked)
+        self.assertEqual(buyer_locked, Decimal("0.00"))
+        
+        # Because funds_remaining was negative, the `if funds_remaining > 0` block was skipped.
+        # The buyer's cash remains exactly at the post-lock state ($8800). 
+        # The platform just "ate" the $300 loss.
+        self.assertEqual(buyer_cash, Decimal("8800.00"))
