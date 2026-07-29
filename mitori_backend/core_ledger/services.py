@@ -57,9 +57,9 @@ def settle_cache(transaction_data, redis_server):
 
     multiplier = Decimal(settings.SYSTEM_PRECISION_MULTIPLIER)
 
-    quantity = Decimal(str(transaction_data['quantity']))
-    price_locked = Decimal(str(transaction_data['price_locked_by_user'])) 
-    price_settled = Decimal(str(transaction_data['price_setteled_at'])) 
+    quantity = Decimal(str(transaction_data['quantity']))/multiplier
+    price_locked = Decimal(str(transaction_data['price_locked_by_user']))/multiplier 
+    price_settled = Decimal(str(transaction_data['price_setteled_at'])) /multiplier
 
 
     total_locked = price_locked * quantity

@@ -7,6 +7,8 @@ import json
 from django.db import transaction, utils
 import os
 from dotenv import load_dotenv
+from django.conf import settings
+from decimal import Decimal
 
 load_dotenv()
 
@@ -18,6 +20,7 @@ class Command(BaseCommand):
         stream_name = "cancelled_order_stream"
         group_name = "django_cancel_workers"
         worker_name = "django_database_worker"
+        multiplier = Decimal(settings.SYSTEM_PRECISION_MULTIPLIER)
 
         try:
             redis_server.xgroup_create(stream_name,groupname=group_name, id=0, mkstream=True)
@@ -35,10 +38,9 @@ class Command(BaseCommand):
                         # print(stream_name, message)
                         for stream_id , data in message:
                             cancelled_order_data = json.loads(data['data'])
-                            price_str = str(cancelled_order_data['price'])
-                            safe_price = Decimal(price_str)
-                            quantity_str = str(cancelled_order_data['number_of_shares'])
-                            safe_quantity = Decimal(quantity_str)
+                            scaled_down_price = Decimal(str(cancelled_order_data['price']))/multiplier
+                            
+                            scaled_down_quantity = Decimal(str(cancelled_order_data['number_of_shares']))/multiplier
                             order_side = cancelled_order_data['side']
 
                             try:
@@ -48,8 +50,8 @@ class Command(BaseCommand):
                                         portfolio = portfolio_id_of_cancelled_order,
                                         transaction_type = TransactionType.SELL if order_side == "sell" else TransactionType.BUY,
                                         status = Status.Cancelled,
-                                        price_locked_by_user = safe_price,
-                                        quantity = safe_quantity,
+                                        price_locked_by_user = scaled_down_price,
+                                        quantity = scaled_down_quantity,
                                         asset_symbol = cancelled_order_data['ticker']
                                     )
 
