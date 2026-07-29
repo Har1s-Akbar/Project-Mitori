@@ -18,12 +18,12 @@ async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Auth
     multiplier = Decimal(os.getenv('SYSTEM_PRECISION_MULTIPLIER'))
 
     order_side = order.side
-    order_quantity = order.number_of_shares/multiplier
-    order_price = order.price / multiplier
+    order_quantity = order.number_of_shares
+    order_price = order.price
     order_ticker = order.ticker
     order_user_id = user.user_id
 
-    total = order_price*order_quantity
+    total = int(order_price*order_quantity*multiplier)
 
 
     retry_counter = 3
@@ -40,17 +40,12 @@ async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Auth
                     safe_available_cash = Decimal(str(available_cash or 0))
                     safe_locked_cash = Decimal(str(locked_cash or 0))
 
-                    safe_scaled_down_available_cash = safe_available_cash/multiplier
-                    safe_scaled_down_locked_cash = safe_locked_cash/multiplier
-
-                    if total > safe_scaled_down_available_cash:
+                    if total > safe_available_cash:
                         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Not enough funds available for this trade you have {safe_available_cash}")
                     else:
-                        safe_scaled_down_available_cash -= int(total * multiplier)
-                        safe_scaled_down_locked_cash += int(total*multiplier)
                         updates={
-                            'available_cash' : safe_scaled_down_available_cash,
-                            'locked_balance' : safe_scaled_down_locked_cash
+                            'available_cash' : safe_available_cash-total,
+                            'locked_balance' : safe_locked_cash+total
                         }
                         pipeline.multi()
                         pipeline.hset(f'cache:portfolio:{order_user_id}', mapping=updates)
@@ -63,19 +58,14 @@ async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Auth
 
                     safe_available_shares = Decimal(str(available_shares or 0))
                     safe_locked_shares = Decimal(str(locked_shares or 0))
+                    order_quantity_scaled = order_quantity*multiplier
 
-                    safe_scaled_down_available_sahres = safe_available_shares/multiplier
-                    safe_scaled_down_locked_shares = safe_locked_shares/multiplier
-
-                    if order_quantity > safe_scaled_down_available_shares:
+                    if order_quantity_scaled > safe_locked_shares:
                         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Not enough shares available for trade shares you have {safe_available_shares} with user id {order_user_id}")
                     else:
-                        safe_scaled_down_available_shares -= (order_quantity*multiplier)
-                        safe_scaled_down_locked_shares += (order_quantity*multiplier)
-
                         updates ={
-                            f'{order_ticker}' : safe_scaled_down_available_sahres,
-                            f'locked_{order_ticker}' : safe_scaled_down_locked_shares, 
+                            f'{order_ticker}' : safe_available_shares-order_quantity_scaled,
+                            f'locked_{order_ticker}' : safe_locked_shares+order_quantity_scaled, 
                         }
                         pipeline.multi()
                         pipeline.hset(f'cache:positions:{order_user_id}', mapping=updates)
