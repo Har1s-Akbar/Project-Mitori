@@ -61,7 +61,7 @@ async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Auth
                     order_quantity_scaled = order_quantity*multiplier
 
                     if order_quantity_scaled > safe_available_shares:
-                        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Not enough shares available for trade shares you have {safe_available_shares} with user id {order_user_id/multiplier}")
+                        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Not enough shares available for trade shares you have {safe_available_shares/multiplier} with user id {order_user_id}")
                     else:
                         updates ={
                             f'{order_ticker}' : safe_available_shares-order_quantity_scaled,
