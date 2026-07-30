@@ -71,7 +71,7 @@ class Command(BaseCommand):
                     for stream_name,message in cancelled_trades:
                         # print(stream_name, message)
                         for stream_id , data in message:
-                            self.process_caancelled_trades_stream(data,multiplier,stream_id,redis_server,stream_name,group_name)
+                            self.process_cancelled_trades_stream(data,multiplier,stream_id,redis_server,stream_name,group_name)
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f'an error {e} occuered'))
 
