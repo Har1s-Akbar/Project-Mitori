@@ -55,7 +55,7 @@ class Command(BaseCommand):
                 # 5. SETTLE BUYER POSITIONS
                 try:
                     buyer_position = Position.objects.select_for_update().get(portfolio=buyer_portfolio, asset_symbol=transaction_data['ticker'])
-                    buyer_position.average_entry_price = (buyer_position.average_entry_price * buyer_position.quantity + price_locked * quantity_scaled_down) / (buyer_position.quantity + quantity_scaled_down)
+                    buyer_position.average_entry_price = (buyer_position.average_entry_price * buyer_position.quantity + price_scaled_down * quantity_scaled_down) / (buyer_position.quantity + quantity_scaled_down)
                     buyer_position.quantity += quantity_scaled_down
                     buyer_position.save()
                 except Position.DoesNotExist:
@@ -63,7 +63,7 @@ class Command(BaseCommand):
                         portfolio=buyer_portfolio,
                         asset_symbol=transaction_data['ticker'],
                         quantity=quantity_scaled_down,
-                        average_entry_price=price_locked
+                        average_entry_price=price_scaled_down
                     )
                 
                 # 6. CREATE AUDIT LOGS
