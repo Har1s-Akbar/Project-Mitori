@@ -15,7 +15,7 @@ load_dotenv()
 class Command(BaseCommand):
     help = "Custom Daemon for settlement of cancelled orders"
 
-    def process_caancelled_trades_stream(self, data, multiplier, stream_id,redis_server, stream_name, group_name):
+    def process_cancelled_trades_stream(self, data, multiplier, stream_id,redis_server, stream_name, group_name):
         cancelled_order_data = json.loads(data['data'])
         scaled_down_price = Decimal(str(cancelled_order_data['price']))/multiplier
                             
@@ -33,6 +33,7 @@ class Command(BaseCommand):
                 portfolio_id_of_cancelled_order = Portfolio.objects.get(user_id = cancelled_order_data['order_owner_id'])
                 CancelledOrders.objects.create(
                 portfolio = portfolio_id_of_cancelled_order,
+                stream_order_id=stream_id,
                 transaction_type = TransactionType.SELL if order_side == "sell" else TransactionType.BUY,
                 status = Status.Cancelled,
                 price_locked_by_user = scaled_down_price,
