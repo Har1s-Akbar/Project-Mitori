@@ -15,6 +15,39 @@ load_dotenv()
 class Command(BaseCommand):
     help = "Custom Daemon for settlement of cancelled orders"
 
+    def process_caancelled_trades_stream(self, data, multiplier, stream_id,redis_server, stream_name, group_name):
+        cancelled_order_data = json.loads(data['data'])
+        scaled_down_price = Decimal(str(cancelled_order_data['price']))/multiplier
+                            
+        scaled_down_quantity = Decimal(str(cancelled_order_data['number_of_shares']))/multiplier
+        order_side = cancelled_order_data['side']
+
+        try:
+            with transaction.atomic():
+
+                if CancelledOrders.objects.filter(stream_order_id=stream_id).exists():
+                    self.stdout.write(self.style.WARNING(f"Duplicate cancel request {stream_id} blocked."))
+                    redis_server.xack(stream_name, group_name, stream_id)
+                    return
+
+                portfolio_id_of_cancelled_order = Portfolio.objects.get(user_id = cancelled_order_data['order_owner_id'])
+                CancelledOrders.objects.create(
+                portfolio = portfolio_id_of_cancelled_order,
+                transaction_type = TransactionType.SELL if order_side == "sell" else TransactionType.BUY,
+                status = Status.Cancelled,
+                price_locked_by_user = scaled_down_price,
+                quantity = scaled_down_quantity,
+                asset_symbol = cancelled_order_data['ticker']
+                )
+
+                transaction.on_commit(
+                    lambda message_id = stream_id : redis_server.xack(stream_name, group_name, message_id)
+                    )
+        except Portfolio.DoesNotExist:
+            self.stdout.write(self.style.ERROR("such portfolio id does not exist"))
+            redis_server.xack(stream_name, group_name, stream_id)
+
+
     def handle(self, *args, **options):
         redis_server = redis.Redis(host=os.getenv('REDIS'),port=os.getenv('REDIS_PORT'), db=0, decode_responses=True)
         stream_name = "cancelled_order_stream"
@@ -37,30 +70,7 @@ class Command(BaseCommand):
                     for stream_name,message in cancelled_trades:
                         # print(stream_name, message)
                         for stream_id , data in message:
-                            cancelled_order_data = json.loads(data['data'])
-                            scaled_down_price = Decimal(str(cancelled_order_data['price']))/multiplier
-                            
-                            scaled_down_quantity = Decimal(str(cancelled_order_data['number_of_shares']))/multiplier
-                            order_side = cancelled_order_data['side']
-
-                            try:
-                                with transaction.atomic():
-                                    portfolio_id_of_cancelled_order = Portfolio.objects.get(user_id = cancelled_order_data['order_owner_id'])
-                                    CancelledOrders.objects.create(
-                                        portfolio = portfolio_id_of_cancelled_order,
-                                        transaction_type = TransactionType.SELL if order_side == "sell" else TransactionType.BUY,
-                                        status = Status.Cancelled,
-                                        price_locked_by_user = scaled_down_price,
-                                        quantity = scaled_down_quantity,
-                                        asset_symbol = cancelled_order_data['ticker']
-                                    )
-
-                                    transaction.on_commit(
-                                        lambda message_id = stream_id : redis_server.xack(stream_name, group_name, message_id)
-                                    )
-                            except Portfolio.DoesNotExist:
-                                self.stdout.write(self.style.ERROR("such portfolio id does not exist"))
-                                redis_server.xack(stream_name, group_name, stream_id)
+                            self.process_caancelled_trades_stream(data,multiplier,stream_id,redis_server,stream_name,group_name)
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f'an error {e} occuered'))
 
