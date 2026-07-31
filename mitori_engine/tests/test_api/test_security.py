@@ -13,7 +13,7 @@ from api.security import is_user_Authenticated
 
 def generate_mock_django_token(
     user_id: str = "user-12345", 
-    kyc_verified: bool = True, 
+    kyc_verified: bool = True or None, 
     expires_in_minutes: int = 15,
     secret: str = TEST_SECRET
 ) -> str:
@@ -31,6 +31,28 @@ def generate_mock_django_token(
     }
     return jwt.encode(payload, secret, algorithm="HS256")
 
+@pytest.mark.asyncio
+async def test_jwt_kyc_false():
+    valid_token = generate_mock_django_token(kyc_verified=False)
+    mock_credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=valid_token)
+
+    with pytest.raises(HTTPException) as exep_info:
+        await is_user_Authenticated(mock_credentials)
+    assert exep_info.value.status_code == 403
+    assert "Kyc not completed : can not trade" in exep_info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_kyc_none():
+    valid_token = generate_mock_django_token(kyc_verified=None)
+
+    mock_credentials = HTTPAuthorizationCredentials(scheme="bearer", credentials=valid_token)
+
+    with pytest.raises(HTTPException) as exep_info:
+        await is_user_Authenticated(mock_credentials)
+
+    assert exep_info.value.status_code == 403
+    assert "Kyc not completed : can not trade" in exep_info.value.detail
 
 @pytest.mark.asyncio
 async def test_valid_token_authorizes_user():
