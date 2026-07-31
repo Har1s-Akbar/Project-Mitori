@@ -44,8 +44,8 @@ async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Auth
                         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Not enough funds available for this trade you have {safe_available_cash/multiplier}")
                     else:
                         updates={
-                            'available_cash' : safe_available_cash-total,
-                            'locked_balance' : safe_locked_cash+total
+                            'available_cash' : int(safe_available_cash-total),
+                            'locked_balance' : int(safe_locked_cash+total)
                         }
                         pipeline.multi()
                         pipeline.hset(f'cache:portfolio:{order_user_id}', mapping=updates)
@@ -64,8 +64,8 @@ async def have_funds(request:Request,user:AuthenticatedUser=Depends(is_user_Auth
                         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Not enough shares available for trade shares you have {safe_available_shares/multiplier} with user id {order_user_id}")
                     else:
                         updates ={
-                            f'{order_ticker}' : safe_available_shares-order_quantity_scaled,
-                            f'locked_{order_ticker}' : safe_locked_shares+order_quantity_scaled, 
+                            f'{order_ticker}' : int(safe_available_shares-order_quantity_scaled),
+                            f'locked_{order_ticker}' : int(safe_locked_shares+order_quantity_scaled), 
                         }
                         pipeline.multi()
                         pipeline.hset(f'cache:positions:{order_user_id}', mapping=updates)
