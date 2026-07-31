@@ -283,3 +283,17 @@ async def test_buy_order_watch_error_exhaustion_raises_409(redis_client, test_re
 
     assert exc_info.value.status_code == 409
     assert "Retry your order" in exc_info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_invalid_market_ticker_raises_404(test_request):
+    
+    user = AuthenticatedUser(user_id="user-123", kyc_verified=True)
+    order = OrderReq(ticker='FAKECOIN', side="buy", price=Decimal("10"), number_of_shares=Decimal("1"))
+    
+    with pytest.raises(HTTPException) as exc_info:
+        async for _ in have_funds(request=test_request, user=user, order=order):
+            pass
+            
+    assert exc_info.value.status_code == 404
+    assert "Ticker does not exist" in exc_info.value.detail
