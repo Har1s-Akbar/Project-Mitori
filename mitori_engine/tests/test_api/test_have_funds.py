@@ -1,5 +1,5 @@
 import pytest
-from tests.testconfig import redis_client, test_request
+from tests.testconfig import test_redis, test_request
 from api.have_funds import have_funds
 from schemas.schema import OrderReq
 from core.models import Side
@@ -12,7 +12,7 @@ import redis.exceptions as exp
 
 @pytest.mark.asyncio
 #for  invalid ticker
-async def test_for_invalid_ticker(redis_client, test_request):
+async def test_for_invalid_ticker(test_redis, test_request):
 
     user_id = uuid.uuid4()
     user = AuthenticatedUser(user_id= str(user_id), kyc_verified=True)
@@ -33,7 +33,7 @@ async def test_for_invalid_ticker(redis_client, test_request):
 
 #test for successful buy side order
 @pytest.mark.asyncio
-async def test_for_buy_order(redis_client,test_request):
+async def test_for_buy_order(test_redis,test_request):
     multiplier = Decimal(100000000)
     user_id = uuid.uuid4()
     #here when we are setting the user equal to Authenticated user we are basically bbypassing our 
@@ -50,7 +50,7 @@ async def test_for_buy_order(redis_client,test_request):
         'available_cash': int(initial_balance),
         'locked_balance':int(0)
     }
-    await redis_client.hset(buyer_cache_portfolio_key_redis,mapping=buyer_portfolio_dict)
+    await test_redis.hset(buyer_cache_portfolio_key_redis,mapping=buyer_portfolio_dict)
 
     order = OrderReq(
         ticker='APP',
@@ -64,8 +64,8 @@ async def test_for_buy_order(redis_client,test_request):
     async for authenticated_user in have_funds(request=test_request, user=user,order=order):
         assert authenticated_user.user_id == user.user_id
 
-    checking_result_available_balance = int(await redis_client.hget(buyer_cache_portfolio_key_redis, 'available_cash'))
-    checking_result_locked_balance = int(await redis_client.hget(buyer_cache_portfolio_key_redis, 'locked_balance'))
+    checking_result_available_balance = int(await test_redis.hget(buyer_cache_portfolio_key_redis, 'available_cash'))
+    checking_result_locked_balance = int(await test_redis.hget(buyer_cache_portfolio_key_redis, 'locked_balance'))
 
     expected_total = int((Decimal("20"))*Decimal("10") * multiplier)
     assert checking_result_available_balance == buyer_portfolio_dict['available_cash'] - expected_total
@@ -77,7 +77,7 @@ async def test_for_buy_order(redis_client,test_request):
 
 #test for selling the shares
 @pytest.mark.asyncio
-async def test_for_selling_shares(redis_client, test_request):
+async def test_for_selling_shares(test_redis, test_request):
     multiplier = Decimal(100000000)
     user_id = uuid.uuid4()
         
@@ -89,7 +89,7 @@ async def test_for_selling_shares(redis_client, test_request):
         'APP': int(initial_shares),
         'locked_APP':0
         }
-    await redis_client.hset(str(seller_cache_positions_key_redis),mapping=seller_shares_dict)
+    await test_redis.hset(str(seller_cache_positions_key_redis),mapping=seller_shares_dict)
 
     order_quantity = Decimal(str(1500))
     order = OrderReq(
@@ -104,14 +104,14 @@ async def test_for_selling_shares(redis_client, test_request):
     async for authenticated_user in have_funds(request=test_request, user=user,order=order):
         assert authenticated_user.user_id == user.user_id
 
-    checking_shares_available_balance = int(await redis_client.hget(seller_cache_positions_key_redis, 'APP'))
-    checking_shares_locked_balance = int(await redis_client.hget(seller_cache_positions_key_redis, 'locked_APP'))
+    checking_shares_available_balance = int(await test_redis.hget(seller_cache_positions_key_redis, 'APP'))
+    checking_shares_locked_balance = int(await test_redis.hget(seller_cache_positions_key_redis, 'locked_APP'))
     
     assert checking_shares_available_balance == int(initial_shares - order_quantity*multiplier)
     assert checking_shares_locked_balance == order_quantity*multiplier
 
 @pytest.mark.asyncio
-async def test_for_shares_exceeding_users_holding(redis_client, test_request):
+async def test_for_shares_exceeding_users_holding(test_redis, test_request):
     multiplier = Decimal(100000000)
     user_id = uuid.uuid4()
         
@@ -123,7 +123,7 @@ async def test_for_shares_exceeding_users_holding(redis_client, test_request):
         'APP': int(initial_shares),
         'locked_APP':0
         }
-    await redis_client.hset(str(seller_cache_positions_key_redis),mapping=seller_shares_dict)
+    await test_redis.hset(str(seller_cache_positions_key_redis),mapping=seller_shares_dict)
 
     order_quantity = Decimal(str(1500))
     order = OrderReq(
@@ -143,7 +143,7 @@ async def test_for_shares_exceeding_users_holding(redis_client, test_request):
 
 
 @pytest.mark.asyncio
-async def test_for_buy_order_exceeding_user_cash(redis_client,test_request):
+async def test_for_buy_order_exceeding_user_cash(test_redis,test_request):
     multiplier = Decimal(100000000)
     user_id = uuid.uuid4()
   
@@ -155,7 +155,7 @@ async def test_for_buy_order_exceeding_user_cash(redis_client,test_request):
         'available_cash': int(initial_balance),
         'locked_balance':int(0)
     }
-    await redis_client.hset(buyer_cache_portfolio_key_redis,mapping=buyer_portfolio_dict)
+    await test_redis.hset(buyer_cache_portfolio_key_redis,mapping=buyer_portfolio_dict)
 
     order = OrderReq(
         ticker='APP',
@@ -173,7 +173,7 @@ async def test_for_buy_order_exceeding_user_cash(redis_client,test_request):
     assert f"Not enough funds available for this trade you have {initial_balance/multiplier}" in exec_info.value.detail
 
 @pytest.mark.asyncio
-async def test_buy_order_rollback_on_server_crash(redis_client, test_request):
+async def test_buy_order_rollback_on_server_crash(test_redis, test_request):
     multiplier = Decimal("100000000")
     user_id = str(uuid.uuid4())
     ticker = 'APP'
@@ -182,7 +182,7 @@ async def test_buy_order_rollback_on_server_crash(redis_client, test_request):
     buyer_cache_key = f'cache:portfolio:{user.user_id}'
     
     initial_balance_int = int(Decimal("4000") * multiplier)
-    await redis_client.hset(
+    await test_redis.hset(
         buyer_cache_key, 
         mapping={'available_cash': initial_balance_int, 'locked_balance': 0}
     )
@@ -210,15 +210,15 @@ async def test_buy_order_rollback_on_server_crash(redis_client, test_request):
         await gen.athrow(RuntimeError("Simulated 500 Internal Server Error"))
 
     
-    final_available = int(await redis_client.hget(buyer_cache_key, 'available_cash'))
-    final_locked = int(await redis_client.hget(buyer_cache_key, 'locked_balance'))
+    final_available = int(await test_redis.hget(buyer_cache_key, 'available_cash'))
+    final_locked = int(await test_redis.hget(buyer_cache_key, 'locked_balance'))
     
     
     assert final_available == initial_balance_int
     assert final_locked == 0
 
 @pytest.mark.asyncio
-async def test_sell_order_rollback_on_server_crash(redis_client, test_request):
+async def test_sell_order_rollback_on_server_crash(test_redis, test_request):
    
     multiplier = Decimal("100000000")
     user_id = str(uuid.uuid4())
@@ -229,7 +229,7 @@ async def test_sell_order_rollback_on_server_crash(redis_client, test_request):
     
     # 1. Arrange: Seed 2,000 shares
     initial_shares_int = int(Decimal("2000") * multiplier)
-    await redis_client.hset(
+    await test_redis.hset(
         seller_cache_key, 
         mapping={ticker: initial_shares_int, f'locked_{ticker}': 0}
     )
@@ -249,14 +249,14 @@ async def test_sell_order_rollback_on_server_crash(redis_client, test_request):
     with pytest.raises(RuntimeError, match="Simulated 500 Internal Server Error"):
         await gen.athrow(RuntimeError("Simulated 500 Internal Server Error"))
 
-    final_available = int(await redis_client.hget(seller_cache_key, ticker))
-    final_locked = int(await redis_client.hget(seller_cache_key, f'locked_{ticker}'))
+    final_available = int(await test_redis.hget(seller_cache_key, ticker))
+    final_locked = int(await test_redis.hget(seller_cache_key, f'locked_{ticker}'))
     
     assert final_available == initial_shares_int
     assert final_locked == 0
 
 @pytest.mark.asyncio
-async def test_buy_order_watch_error_exhaustion_raises_409(redis_client, test_request):
+async def test_buy_order_watch_error_exhaustion_raises_409(test_redis, test_request):
     """
     Proves that if another process continually modifies the user's cache (race condition),
     the system exhausts its 3 retries and correctly bails out with a 409 Conflict.
@@ -264,7 +264,7 @@ async def test_buy_order_watch_error_exhaustion_raises_409(redis_client, test_re
     multiplier = Decimal("100000000")
     user_id = "user-race-123"
     
-    await redis_client.hset(
+    await test_redis.hset(
         f"cache:portfolio:{user_id}", 
         mapping={"available_cash": int(Decimal("100") * multiplier), "locked_balance": 0}
     )
