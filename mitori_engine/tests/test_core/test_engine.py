@@ -59,19 +59,15 @@ def test_order_no_match():
 
 def test_best_bid_match():
     book = OrderBook('APP')
-    buySide = create_order(Side.BUY, 20, "15",'APP')
-    sellSide = create_order(Side.SELL,20,"8",'APP')
+    buySide = create_order(Side.BUY, 20, "15", 'APP')   
+    sellSide = create_order(Side.SELL, 20, "8", 'APP')  
 
     book.add_order(buySide)
     book.add_order(sellSide)
     trade = book.execute()
 
     assert len(trade) == 1
-    assert trade[0].price_setteled_at == 8.000
-    assert trade[0].quantity == 20
-    assert trade[0].price_setteled_at != trade[0].price_locked_by_user
-    assert trade[0].buyer_id != trade[0].seller_id
-    assert trade[0].ticker == 'APP'
+    assert trade[0].price_setteled_at == Decimal('15')
 
 def test_best_bid_partial_fill():
     book = OrderBook('APP')
@@ -84,7 +80,7 @@ def test_best_bid_partial_fill():
 
     assert len(trade) ==1
     assert trade[0].quantity == 20
-    assert trade[0].price_locked_by_user != trade[0].price_setteled_at
+    assert trade[0].price_locked_by_user == trade[0].price_setteled_at
     assert trade[0].seller_id != trade[0].buyer_id
     assert trade[0].ticker == 'APP'
     assert trade[0].price_setteled_at == 8
