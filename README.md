@@ -1,3 +1,4 @@
+![CI](https://github.com/Har1s-Akbar/Project-Mitori/actions/workflows/ci.yml/badge.svg)
 # Project-Mitori
 A microservice-based stock brokerage platform and order book analytics engine
 
