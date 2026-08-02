@@ -27,7 +27,7 @@ def generate_mock_django_token(
         "iat": now,
         "jti": "mock_jti_string",
         "user_id": user_id,
-        "is_kyc_verified": kyc_verified  # Matches security.py expectation
+        "is_kyc_verified": kyc_verified  
     }
     return jwt.encode(payload, secret, algorithm="HS256")
 

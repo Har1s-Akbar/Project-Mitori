@@ -62,7 +62,7 @@ def order_factory():
     def _order_create(ticker: str, side: Side, price: Decimal, number_of_shares: Decimal, order_owner_id: uuid.UUID):
         return OrderReq(
             ticker=ticker,
-            side=side,  # BUG FIX 3: Removed hardcoded side.BUY
+            side=side,  
             price=price,
             number_of_shares=number_of_shares,
             order_owner_id=order_owner_id
