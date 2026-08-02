@@ -90,21 +90,21 @@ class redis_positions_portfolio_test(TransactionTestCase):
 
 
         # when the user buys the cash in portfolio is locked we are locking the funds replicating that
-        locking_portfolio_cash_in_cache= test_redis_client.hincrbyfloat(portfolio_key, 'available_cash',-(Decimal("200")*self.multiplier))
-        adding_to_locked_portfolio_cache= test_redis_client.hincrbyfloat(portfolio_key,'locked_balance',Decimal("200")*self.multiplier)
+        locking_portfolio_cash_in_cache= test_redis_client.hincrby(portfolio_key, 'available_cash',-int(Decimal("200")*self.multiplier))
+        adding_to_locked_portfolio_cache= test_redis_client.hincrby(portfolio_key,'locked_balance',int(Decimal("200")*self.multiplier))
 
         getting_cache_cash = test_redis_client.hget(portfolio_key,'available_cash')
         getting_locked_cache_cash = test_redis_client.hget(portfolio_key,'locked_balance')
-        self.assertEqual(Decimal(str(getting_cache_cash)),9800*self.multiplier)
-        self.assertEqual(Decimal((getting_locked_cache_cash)),200*self.multiplier)
+        self.assertEqual(Decimal(str(getting_cache_cash)),Decimal(9800)*self.multiplier)
+        self.assertEqual(Decimal((getting_locked_cache_cash)),Decimal(200)*self.multiplier)
 
         redis_positions_portfolio_service(self.trader.id)
 
         getting_cache_cash_after_relogin = test_redis_client.hget(portfolio_key,'available_cash')
         getting_locked_cash_after_relogin = test_redis_client.hget(portfolio_key,'locked_balance')
 
-        self.assertEqual(float(getting_cache_cash_after_relogin),9800)
-        self.assertEqual(float(getting_locked_cash_after_relogin),200)
+        self.assertEqual(int(getting_cache_cash_after_relogin), int(Decimal("9800") * self.multiplier))
+        self.assertEqual(int(getting_locked_cash_after_relogin), int(Decimal("200") * self.multiplier))
 
         #This test fails  it  shows that the architecture can not support relogin cache hydration
         #If a user has an ongoing trade and for any reason he refreshes his/her browser or relogs in
