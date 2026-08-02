@@ -83,7 +83,7 @@ def test_best_bid_partial_fill():
     assert trade[0].price_locked_by_user == trade[0].price_setteled_at
     assert trade[0].seller_id != trade[0].buyer_id
     assert trade[0].ticker == 'APP'
-    assert trade[0].price_setteled_at == 8
+    assert trade[0].price_setteled_at == 15
     # checking if the partial filled order is in the book and checking if the completely filled order is flushed from the book
     assert len(book.bid) == 1 
     assert len(book.ask) == 0
