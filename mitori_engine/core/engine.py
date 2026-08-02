@@ -13,22 +13,19 @@ class OrderBook():
         self.canceled_uuids = set()
 
     def add_order(self, order: Order):
-        try:
-            order_id_str = str(order.order_id)
+        
+        order_id_str = str(order.order_id)
             
-            if order.side == Side.SELL:
-                sorted_tuple = (order.price, order.date_time, order_id_str, order)
-                heapq.heappush(self.ask, sorted_tuple)
-                self.active_uuids[order_id_str] = order
+        if order.side == Side.SELL:
+            sorted_tuple = (order.price, order.date_time, order_id_str, order)
+            heapq.heappush(self.ask, sorted_tuple)
+            self.active_uuids[order_id_str] = order
                 
-            if order.side == Side.BUY:
-                sorted_tuple = (-1 * order.price, order.date_time, order_id_str, order)
-                heapq.heappush(self.bid, sorted_tuple)
-                self.active_uuids[order_id_str] = order
-                
-        except Exception as e:
-            print(f"\nCRITICAL ENGINE CRASH IN ADD_ORDER: {e}\n")
-
+        if order.side == Side.BUY:
+            sorted_tuple = (-1 * order.price, order.date_time, order_id_str, order)
+            heapq.heappush(self.bid, sorted_tuple)
+            self.active_uuids[order_id_str] = order
+    
     def execute(self):
         trades_executed = []
         while self.bid and self.ask:
