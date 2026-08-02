@@ -7,7 +7,8 @@ from decimal import Decimal
 MARKET ={
     "APP": OrderBook("APP"),
     "TSLA": OrderBook("TSLA"),
-    "AUX":OrderBook("AUX")
+    "AUX":OrderBook("AUX"),
+    "GOOGL":OrderBook("GOOGL")
 }
 
 class OrderReq(BaseModel):

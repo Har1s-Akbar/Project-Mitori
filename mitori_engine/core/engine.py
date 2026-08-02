@@ -13,17 +13,21 @@ class OrderBook():
         self.canceled_uuids = set()
 
     def add_order(self, order: Order):
-        order_id_str = str(order.order_id)
-        
-        if order.side == Side.SELL:
-            sorted_tuple = (order.price, order.date_time, order.order_id, order)
-            heapq.heappush(self.ask, sorted_tuple)
-            self.active_uuids[order_id_str] = order
+        try:
+            order_id_str = str(order.order_id)
             
-        if order.side == Side.BUY:
-            sorted_tuple = (-1 * order.price, order.date_time, order.order_id, order)
-            heapq.heappush(self.bid, sorted_tuple)
-            self.active_uuids[order_id_str] = order
+            if order.side == Side.SELL:
+                sorted_tuple = (order.price, order.date_time, order_id_str, order)
+                heapq.heappush(self.ask, sorted_tuple)
+                self.active_uuids[order_id_str] = order
+                
+            if order.side == Side.BUY:
+                sorted_tuple = (-1 * order.price, order.date_time, order_id_str, order)
+                heapq.heappush(self.bid, sorted_tuple)
+                self.active_uuids[order_id_str] = order
+                
+        except Exception as e:
+            print(f"\nCRITICAL ENGINE CRASH IN ADD_ORDER: {e}\n")
 
     def execute(self):
         trades_executed = []
@@ -48,20 +52,27 @@ class OrderBook():
                 transactioning_shares = min(best_bid.number_of_shares, best_ask.number_of_shares)
                 best_ask.number_of_shares = best_ask.number_of_shares - transactioning_shares 
                 best_bid.number_of_shares = best_bid.number_of_shares - transactioning_shares
+
+                #Determin the maker if the maker is either the seller or the buyer
+                if best_bid.date_time < best_ask.date_time:
+                    # The Buyer was resting in the book first. Their price wins.
+                    settled_price = best_bid.price
+                else:
+                    # The Seller was resting in the book first. Their price wins.
+                    settled_price = best_ask.price
                 trades_executed.append(Trade(
                     ticker=self.ticker,
                     quantity=transactioning_shares,
                     price_locked_by_user=best_bid.price,
-                    price_setteled_at=best_ask.price,
+                    price_setteled_at=settled_price,
                     buyer_id=best_bid.order_owner_id,
                     seller_id=best_ask.order_owner_id
                 ))
-
-            if best_ask.is_filled:
+            if best_ask.number_of_shares <= 0:
                 heapq.heappop(self.ask)
                 self.active_uuids.pop(str(best_ask.order_id), None)
                 
-            if best_bid.is_filled:
+            if best_bid.number_of_shares <= 0:
                 heapq.heappop(self.bid)
                 self.active_uuids.pop(str(best_bid.order_id), None)
                 

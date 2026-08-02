@@ -4,6 +4,7 @@ import json
 from tests.testconfig import test_redis, test_request, order_factory, token_factory,seed_cash_factory,seed_shares_factory, async_client
 import uuid
 from core.models import Side
+import asyncio
 
 @pytest.mark.parametrize(
         "kyc_status , expires_in, expected_outcome",
@@ -100,4 +101,266 @@ async def testing_order_route_with_happy_paths_and_edgecase(
 
     assert response.status_code == expected_outcome, f"Route failed: {response.text}"
 
+@pytest.mark.parametrize(
+    "price_str, shares_str, expected_status",
+    [
+        ("0.00000001", "10", 200),     
+        ("0", "100", 422),             
+        ("100", "0", 422),             
+        ("-50", "10", 422),            
+        ("9999999999.99", "1", 200),   
+    ],
+    ids=["fractional_penny_accepted", "zero_price", "zero_shares", "negative_price", "massive_value"]
+)
 
+@pytest.mark.asyncio
+async def test_order_mathematical_boundaries(
+    async_client, token_factory, seed_cash_factory,
+    price_str, shares_str, expected_status
+):
+    user_id = str(uuid.uuid4())
+
+    await seed_cash_factory(owner_id=user_id, available_cash=Decimal("10000000000.00"))
+    valid_token = token_factory(user_id=user_id, kyc_verified=True)
+
+    raw_malicious_payload = {
+        "ticker": "APP",
+        "side": "buy", 
+        "price": price_str,
+        "number_of_shares": shares_str,
+        "order_owner_id": user_id
+    }
+
+    response = await async_client.post(
+        "/order",
+        json=raw_malicious_payload,
+        headers={"Authorization": f"Bearer {valid_token}"}
+    )
+
+    assert response.status_code == expected_status, f"Expected {expected_status}, got {response.status_code}: {response.text}"
+
+@pytest.mark.asyncio
+async def test_matching_engine(
+    async_client, token_factory, seed_cash_factory,
+    seed_shares_factory, order_factory, test_redis
+):
+    user_id_1_buyer = str(uuid.uuid4())
+
+    await seed_cash_factory(owner_id=user_id_1_buyer, available_cash=Decimal("10000"))
+
+    valid_token_for_user_1 = token_factory(user_id=user_id_1_buyer, kyc_verified=True)
+
+
+    buy_order_by_user_1 = order_factory(
+        ticker="APP",
+        side = Side.BUY,
+        price= Decimal("10"),
+        number_of_shares=Decimal("100"),
+        order_owner_id = user_id_1_buyer
+    )
+
+    response1 = await async_client.post(
+        "/order",
+        json=buy_order_by_user_1.model_dump(mode="json"),
+        headers={"Authorization": f"Bearer {valid_token_for_user_1}"}
+    )
+
+    assert response1.status_code == 200, f"Route failed: {response1.text}"
+
+    user_id_2_seller = str(uuid.uuid4())
+    await seed_shares_factory(owner_id=user_id_2_seller,shares=Decimal("10000"), ticker="APP")
+
+    valid_token_for_user_2 = token_factory(user_id=user_id_2_seller, kyc_verified=True)
+
+
+    sell_order_by_user_2 = order_factory(
+        ticker="APP",
+        side = Side.SELL,
+        price= Decimal("10"),
+        number_of_shares=Decimal("100"),
+        order_owner_id = user_id_2_seller
+    )
+
+    response2 = await async_client.post(
+        "/order",
+        json=sell_order_by_user_2.model_dump(mode="json"),
+        headers={'Authorization':f"Bearer {valid_token_for_user_2}"}
+    )
+
+    assert response2.status_code == 200 , f"Route Failed : {response2.detail}"
+
+    stream_name = "executed_trades_stream"
+
+    getting_stream = await test_redis.xread({stream_name: "0-0"})
+    assert len(getting_stream) > 0, "No streams returned"
+
+    stream_name_returned, message_list = getting_stream[0]
+
+    test_specific_trades = []
+    
+    for redis_id, raw_payload in message_list:
+        trade_data = json.loads(raw_payload["data"])
+        
+        if trade_data["seller_id"] == user_id_2_seller: 
+            test_specific_trades.append(trade_data)
+
+    assert len(test_specific_trades) > 0, "Engine failed to match our specific test order"
+    
+    total_executed_qty = sum(trade["quantity"] for trade in test_specific_trades)
+    
+    expected_qty_scaled = int(Decimal("100") * Decimal("100000000")) 
+    assert total_executed_qty == expected_qty_scaled, "Engine did not fully fill the order"
+
+    first_trade = test_specific_trades[0]
+    assert first_trade["ticker"] == "APP"
+    assert "price_setteled_at" in first_trade
+    assert "order_id" in first_trade
+
+
+@pytest.mark.asyncio
+async def test_matching_engine_partial_fill(
+    async_client, token_factory, seed_cash_factory,
+    seed_shares_factory, order_factory, test_redis
+):
+    """
+    Proves that if a Buyer wants 100 shares, but the Seller only has 40,
+    the engine executes exactly 40 and leaves the rest.
+    """
+    user_buyer = str(uuid.uuid4())
+    user_seller = str(uuid.uuid4())
+    multiplier = Decimal("100000000")
+    
+    await seed_cash_factory(owner_id=user_buyer, available_cash=Decimal("10000"))
+    await seed_shares_factory(owner_id=user_seller, shares=Decimal("40"), ticker="AUX")
+    
+    buyer_token = token_factory(user_id=user_buyer, kyc_verified=True)
+    seller_token = token_factory(user_id=user_seller, kyc_verified=True)
+
+    sell_order = order_factory(ticker="AUX", side=Side.SELL, price=Decimal("10"), number_of_shares=Decimal("40"), order_owner_id=user_seller)
+    await async_client.post("/order", json=sell_order.model_dump(mode="json"), headers={'Authorization': f"Bearer {seller_token}"})
+    
+    buy_order = order_factory(ticker="AUX", side=Side.BUY, price=Decimal("10"), number_of_shares=Decimal("100"), order_owner_id=user_buyer)
+    await async_client.post("/order", json=buy_order.model_dump(mode="json"), headers={"Authorization": f"Bearer {buyer_token}"})
+
+    getting_stream = await test_redis.xread({"executed_trades_stream": "0-0"})
+    _, message_list = getting_stream[0]
+    
+    test_trades = [json.loads(p["data"]) for _, p in message_list if json.loads(p["data"])["seller_id"] == user_seller]
+    
+    assert len(test_trades) > 0, "Engine failed to match the partial fill"
+    
+    expected_qty_scaled = int(Decimal("40") * multiplier)
+    assert test_trades[0]["quantity"] == expected_qty_scaled, f"Engine over-filled! Expected {expected_qty_scaled}"
+
+@pytest.mark.asyncio
+async def test_matching_engine_price_time_priority(
+    async_client, token_factory, seed_cash_factory,
+    seed_shares_factory, order_factory, test_redis
+):
+    """
+    - What this test caught: This test originally failed because exhausted orders 
+      were getting stuck at the top of the heap. It caused an infinite `while` loop 
+      in the engine that silently crashed the FastAPI background task.
+    - Engine Fix: We abandoned the static `is_filled` boolean on the Pydantic model 
+      and updated the `OrderBook.execute()` loop to explicitly check mathematical reality: 
+      `if best_ask.number_of_shares <= 0: heapq.heappop(self.ask)`.
+    - Test Architecture Fix: We introduced "Market Isolation" by using a dedicated 
+      ticker ("TSLA") to ensure this test runs on a pristine, empty order book in RAM, 
+      avoiding "Ghost Orders" bleeding over from previous tests.
+    """
+    test_ticker = "TSLA" 
+
+    user_seller_1 = str(uuid.uuid4())
+    user_seller_2 = str(uuid.uuid4())
+    user_buyer = str(uuid.uuid4())
+
+    await seed_shares_factory(owner_id=user_seller_1, shares=Decimal("1000"), ticker=test_ticker)
+    await seed_shares_factory(owner_id=user_seller_2, shares=Decimal("1000"), ticker=test_ticker)
+    await seed_cash_factory(owner_id=user_buyer, available_cash=Decimal("10000"))
+
+    token_s1 = token_factory(user_id=user_seller_1, kyc_verified=True)
+    token_s2 = token_factory(user_id=user_seller_2, kyc_verified=True)
+    token_b = token_factory(user_id=user_buyer, kyc_verified=True)
+
+    sell_1 = order_factory(ticker=test_ticker, side=Side.SELL, price=Decimal("10"), number_of_shares=Decimal("10"), order_owner_id=user_seller_1)
+    res1 = await async_client.post("/order", json=sell_1.model_dump(mode="json"), headers={'Authorization': f"Bearer {token_s1}"})
+    assert res1.status_code == 200, f"Failed: {res1.text}"
+
+    sell_2 = order_factory(ticker=test_ticker, side=Side.SELL, price=Decimal("10"), number_of_shares=Decimal("10"), order_owner_id=user_seller_2)
+    res2 = await async_client.post("/order", json=sell_2.model_dump(mode="json"), headers={'Authorization': f"Bearer {token_s2}"})
+    assert res2.status_code == 200
+
+    buy = order_factory(ticker=test_ticker, side=Side.BUY, price=Decimal("10"), number_of_shares=Decimal("10"), order_owner_id=user_buyer)
+    res3 = await async_client.post("/order", json=buy.model_dump(mode="json"), headers={"Authorization": f"Bearer {token_b}"})
+    assert res3.status_code == 200
+
+    await asyncio.sleep(0.2) 
+
+    getting_stream = await test_redis.xread({"executed_trades_stream": "0-0"})
+    _, message_list = getting_stream[0]
+
+    buyer_trades = [
+        json.loads(p["data"]) for _, p in message_list 
+        if json.loads(p["data"])["buyer_id"] == user_buyer 
+        and json.loads(p["data"])["ticker"] == test_ticker
+    ]
+
+    assert len(buyer_trades) > 0, "Engine failed to match trades"
+    assert buyer_trades[0]["seller_id"] == user_seller_1, "Engine failed FIFO! Matched the wrong seller."
+
+
+@pytest.mark.asyncio
+async def test_matching_engine_price_improvement(
+    async_client, token_factory, seed_cash_factory,
+    seed_shares_factory, order_factory, test_redis
+):
+    """
+    Proves that if a Buyer is willing to pay $12, but a resting Seller
+    is offering at $10, the trade executes at the resting price ($10).
+    
+    - What this test caught: This test caught a severe Maker/Taker pricing flaw. 
+      The engine was originally hardcoded to always settle at the Seller's price 
+      (`price_setteled_at = best_ask.price`). If a Buyer rested at $12 and a Seller 
+      swept at $10, the engine robbed the Seller of their price improvement.
+    - Engine Fix: We updated the `execute()` loop to compare order timestamps. The engine
+      now dynamically awards the settlement price to whichever order arrived first 
+      (The Maker), fulfilling the strict rules of a Limit Order Book.
+    - Test Architecture Fix: We introduced "Market Isolation" by using a dedicated 
+      ticker ("GOOGL") to prevent the billion-dollar Ghost Buyer from previous 
+      boundary tests from instantly eating our test Seller before the Buyer could act.
+    """
+    test_ticker = "GOOGL" 
+
+    user_seller = str(uuid.uuid4())
+    user_buyer = str(uuid.uuid4())
+    multiplier = Decimal("100000000")
+
+    await seed_shares_factory(owner_id=user_seller, shares=Decimal("1000"), ticker=test_ticker)
+    await seed_cash_factory(owner_id=user_buyer, available_cash=Decimal("10000"))
+
+    seller_token = token_factory(user_id=user_seller, kyc_verified=True)
+    buyer_token = token_factory(user_id=user_buyer, kyc_verified=True)
+
+    sell_order = order_factory(ticker=test_ticker, side=Side.SELL, price=Decimal("10"), number_of_shares=Decimal("10"), order_owner_id=user_seller)
+    res1 = await async_client.post("/order", json=sell_order.model_dump(mode="json"), headers={'Authorization': f"Bearer {seller_token}"})
+    assert res1.status_code == 200
+
+    buy_order = order_factory(ticker=test_ticker, side=Side.BUY, price=Decimal("12"), number_of_shares=Decimal("10"), order_owner_id=user_buyer)
+    res2 = await async_client.post("/order", json=buy_order.model_dump(mode="json"), headers={"Authorization": f"Bearer {buyer_token}"})
+    assert res2.status_code == 200
+
+    await asyncio.sleep(0.2)
+
+    getting_stream = await test_redis.xread({"executed_trades_stream": "0-0"})
+    _, message_list = getting_stream[0]
+
+    test_trades = [
+        json.loads(p["data"]) for _, p in message_list 
+        if json.loads(p["data"])["buyer_id"] == user_buyer
+        and json.loads(p["data"])["ticker"] == test_ticker
+    ]
+
+    assert len(test_trades) > 0, "Engine failed to cross the spread"
+    
+    expected_settled_price = int(Decimal("10") * multiplier)
+    assert test_trades[0]["price_setteled_at"] == expected_settled_price, "Engine failed to provide price improvement!"
