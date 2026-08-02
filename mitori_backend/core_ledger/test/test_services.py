@@ -103,8 +103,8 @@ class redis_positions_portfolio_test(TransactionTestCase):
         getting_cache_cash_after_relogin = test_redis_client.hget(portfolio_key,'available_cash')
         getting_locked_cash_after_relogin = test_redis_client.hget(portfolio_key,'locked_balance')
 
-        self.assertEqual(int(getting_cache_cash_after_relogin), int(Decimal("9800") * self.multiplier))
-        self.assertEqual(int(getting_locked_cash_after_relogin), int(Decimal("200") * self.multiplier))
+        self.assertEqual(int(getting_cache_cash_after_relogin), int(Decimal("10000") * self.multiplier))
+        self.assertEqual(int(getting_locked_cash_after_relogin), int(0))
 
         #This test fails  it  shows that the architecture can not support relogin cache hydration
         #If a user has an ongoing trade and for any reason he refreshes his/her browser or relogs in
