@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  django-backend:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mitori_test
+          POSTGRES_USER: mitori
+          POSTGRES_PASSWORD: mitori
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Postgres - job is NOT containerized, so service containers are reached
+      # via localhost, not via the service name. This is the same class of
+      # mismatch that broke the docker-compose Redis config a while back -
+      # don't reuse 'postgres'/'redis' here, they won't resolve on this runner.
+      DATABASE_NAME: mitori_test
+      DATABASE_USER: mitori
+      DATABASE_PASSWORD: mitori
+      DATABASE_HOST: localhost
+      DATABASE_PORT: 5432
+
+      # Redis - core_ledger/services.py and both daemons read REDIS / REDIS_PORT
+      # directly with no fallback default, so both must be set explicitly.
+      REDIS: localhost
+      REDIS_PORT: 6379
+
+      # Django + JWT
+      DJANGO_SECRET_KEY: ci-test-secret-key-not-for-production
+      DJANGO_DEBUG: "False"
+      JWT_SECRET_KEY: ci-test-shared-jwt-secret
+      ALGORITHM: HS256
+      # SYSTEM_PRECISION_MULTIPLIER is hardcoded in settings.py, not read from
+      # the environment on the Django side - nothing to set here.
+
+    defaults:
+      run:
+        working-directory: mitori_backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: mitori_backend/requirements.txt
+
+      - run: pip install -r requirements.txt
+
+      # Django's test runner builds and migrates its own throwaway test
+      # database automatically from your migrations - no separate
+      # `migrate` step needed here, this just runs the suite.
+      - run: python manage.py test
+
+  fastapi-engine:
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # client.py defaults REDIS_HOST to 'redis' (correct for docker-compose,
+      # wrong here) - override explicitly or every test touching Redis fails.
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+
+      JWT_SECRET_KEY: ci-test-shared-jwt-secret
+      ALGORITHM: HS256
+
+      # have_funds.py / main.py read this with no default - unset it and
+      # every order-related test fails on Decimal(None).
+      SYSTEM_PRECISION_MULTIPLIER: 100000000
+
+    defaults:
+      run:
+        working-directory: mitori_engine
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: mitori_engine/requirements.txt
+
+      - run: pip install -r requirements.txt
+
+      - run: pytest
