@@ -31,8 +31,6 @@ class redis_positions_portfolio_test(TransactionTestCase):
         self.multiplier = Decimal(settings.SYSTEM_PRECISION_MULTIPLIER)
         self.trader =  user.objects.create(id=uuid.uuid4(), email="trader@gmail.com", date_of_birth="1999-09-08", full_name="tarder",
                                               is_kyc_verified="True")
-        # self.portfolio_of_trader = Portfolio.objects.create(user=self.trader,cash_balance=10000.00)
-        # position_of_trader = Position.objects.create(portfolio=portfolio_of_trader, asset_symbol='APP', quantity=1000.00)
         
                 
     @patch('core_ledger.services.redis_client',test_redis_client)
@@ -92,13 +90,13 @@ class redis_positions_portfolio_test(TransactionTestCase):
 
 
         # when the user buys the cash in portfolio is locked we are locking the funds replicating that
-        locking_portfolio_cash_in_cache= test_redis_client.hincrbyfloat(portfolio_key, 'available_cash',-200)
-        adding_to_locked_portfolio_cache= test_redis_client.hincrbyfloat(portfolio_key,'locked_balance',200)
+        locking_portfolio_cash_in_cache= test_redis_client.hincrbyfloat(portfolio_key, 'available_cash',-(Decimal("200")*self.multiplier))
+        adding_to_locked_portfolio_cache= test_redis_client.hincrbyfloat(portfolio_key,'locked_balance',Decimal("200")*self.multiplier)
 
         getting_cache_cash = test_redis_client.hget(portfolio_key,'available_cash')
         getting_locked_cache_cash = test_redis_client.hget(portfolio_key,'locked_balance')
-        self.assertEqual(float(getting_cache_cash),9800)
-        self.assertEqual(float(getting_locked_cache_cash),200)
+        self.assertEqual(Decimal(str(getting_cache_cash)),9800*self.multiplier)
+        self.assertEqual(Decimal((getting_locked_cache_cash)),200*self.multiplier)
 
         redis_positions_portfolio_service(self.trader.id)
 
