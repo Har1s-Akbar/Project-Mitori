@@ -23,10 +23,12 @@ MULTIPLIER = int(os.getenv("SYSTEM_PRECISION_MULTIPLIER", 100000000))
 
 @pytest_asyncio.fixture(scope="function")
 async def test_redis():
+    REDIS_HOST = os.getenv("REDIS_HOST") or os.getenv("REDIS") or "localhost"
+    REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
     """Single source of truth for the DB 1 test Redis client."""
     client = redisasync.Redis(
-        host=os.getenv("REDIS_HOST", "redis"),
-        port=int(os.getenv("REDIS_PORT", 6379)), 
+        host=REDIS_HOST,
+        port=REDIS_PORT, 
         db=1, 
         decode_responses=True
     )

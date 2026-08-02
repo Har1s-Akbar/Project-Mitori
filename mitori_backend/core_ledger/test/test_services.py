@@ -8,12 +8,18 @@ from core_ledger.models import Portfolio,Position,LedgerTransaction
 from django.utils import timezone
 from decimal import Decimal
 from django.conf import settings
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
 user = get_user_model()
 
+REDIS_HOST = os.getenv("REDIS_HOST") or os.getenv("REDIS") or "localhost"
+REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+
 test_redis_client = redis.Redis(
-    host='redis',
-    port=6379,
+    host=REDIS_HOST,
+    port=REDIS_PORT,
     db=1,
     decode_responses=True
 )

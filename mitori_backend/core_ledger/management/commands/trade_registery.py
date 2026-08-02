@@ -101,7 +101,9 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f"Settlement failed because {e}")) 
 
     def handle(self, *args, **options):
-        redis_server = redis.Redis(host=os.getenv('REDIS'), port=os.getenv('REDIS_PORT'), db=0, decode_responses=True)
+        REDIS_HOST = os.getenv("REDIS_HOST") or os.getenv("REDIS") or "localhost"
+        REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+        redis_server = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)
         stream_name = "executed_trades_stream"
         group_name = "django_workers"
         worker_name = "django_database_worker"
