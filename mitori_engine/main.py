@@ -136,10 +136,13 @@ async def delete_order(order_id : str, ticker:str,redis_client : redis.Redis = D
     if not order_canceled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order does not exist")
 
+    current_context = structlog.contextvars.get_contextvars()
+    correlation_id = current_context("correlation_id", "fallback_id")
     user_id = str(order_canceled.order_owner_id)
     pipeline = redis_client.pipeline()
     async with pipeline:
         cancelled_trade_dict = dataclasses.asdict(order_canceled)
+        cancelled_trade_data['correlation_id'] = correlation_id
         cancelled_trade_data = {
             "ticker" : ticker,
             "data": json.dumps(cancelled_trade_dict, default=str)
@@ -160,7 +163,7 @@ async def delete_order(order_id : str, ticker:str,redis_client : redis.Redis = D
                             approximate=True)
             
         await pipeline.execute()
-
+        logger.info("cancelled_trade_pushed_to_stream", order_id = order_id, ticker=order_canceled.ticker)
     return{
         "message" : f'Order with id {order_id} was cancelled and funds are returned',
         "status": status.HTTP_200_OK

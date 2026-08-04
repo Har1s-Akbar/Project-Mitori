@@ -20,7 +20,20 @@ class Command(BaseCommand):
 
     def process_cancelled_trades_stream(self, data, multiplier, stream_id,redis_server, stream_name, group_name, log):
 
+        structlog.contextvars.clear_contextvars()
+
         cancelled_order_data = json.loads(data['data'])
+
+        correlation_id = cancelled_order_data['correlation_id']
+
+        structlog.contextvars.bind_contextvars(
+            correlation_id=correlation_id,
+            message_id=stream_id,
+            ticker=cancelled_order_data['ticker']
+        )
+        log_binded = log.bind()
+
+
         scaled_down_price = Decimal(str(cancelled_order_data['price']))/multiplier
                             
         scaled_down_quantity = Decimal(str(cancelled_order_data['number_of_shares']))/multiplier
@@ -30,7 +43,7 @@ class Command(BaseCommand):
             with transaction.atomic():
 
                 if CancelledOrders.objects.filter(stream_order_id=stream_id).exists():
-                    log.warning("duplication_rejection", message_id=stream_id, reason="Trade already settled in the database , rejecting duplication.")
+                    log_binded.warning("duplication_rejection", message_id=stream_id, reason="Trade already settled in the database , rejecting duplication.")
                     redis_server.xack(stream_name, group_name, stream_id)
                     return
 
@@ -49,13 +62,14 @@ class Command(BaseCommand):
                     lambda message_id = stream_id : redis_server.xack(stream_name, group_name, message_id)
                     )
                 transaction.on_commit(
-                    lambda message_id =stream_id :log.info("Cancelled_order_settled", info="Cnacelled order settled in the database")
+                    lambda message_id =stream_id :log_binded.info("Cancelled_order_settled", info="Cnacelled order settled in the database")
                 )
         except Portfolio.DoesNotExist:
             # self.stdout.write(self.style.ERROR("such portfolio id does not exist"))
-            log.error("Portfolio_DoesNotExist", error='Portfolio does not exist')
+            log_binded.error("Portfolio_DoesNotExist", error='Portfolio does not exist')
             redis_server.xack(stream_name, group_name, stream_id)
-
+        finally:
+            structlog.contextvars.clear_contextvars()
 
     def handle(self, *args, **options):
         REDIS_HOST = os.getenv("REDIS_HOST") or os.getenv("REDIS") or "localhost"
