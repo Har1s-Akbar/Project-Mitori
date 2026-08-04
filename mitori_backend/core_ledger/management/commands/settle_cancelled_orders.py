@@ -9,13 +9,16 @@ import os
 from dotenv import load_dotenv
 from django.conf import settings
 from decimal import Decimal
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 load_dotenv()
 
 class Command(BaseCommand):
     help = "Custom Daemon for settlement of cancelled orders"
 
-    def process_cancelled_trades_stream(self, data, multiplier, stream_id,redis_server, stream_name, group_name):
+    def process_cancelled_trades_stream(self, data, multiplier, stream_id,redis_server, stream_name, group_name, log):
         cancelled_order_data = json.loads(data['data'])
         scaled_down_price = Decimal(str(cancelled_order_data['price']))/multiplier
                             
@@ -26,7 +29,7 @@ class Command(BaseCommand):
             with transaction.atomic():
 
                 if CancelledOrders.objects.filter(stream_order_id=stream_id).exists():
-                    self.stdout.write(self.style.WARNING(f"Duplicate cancel request {stream_id} blocked."))
+                    log.warning("duplication_rejection", message_id=stream_id, reason="Trade already settled in the database , rejecting duplication.")
                     redis_server.xack(stream_name, group_name, stream_id)
                     return
 
@@ -44,8 +47,12 @@ class Command(BaseCommand):
                 transaction.on_commit(
                     lambda message_id = stream_id : redis_server.xack(stream_name, group_name, message_id)
                     )
+                transaction.on_commit(
+                    lambda message_id =stream_id :log.info("Cancelled_order_settled", info="Cnacelled order settled in the database")
+                )
         except Portfolio.DoesNotExist:
-            self.stdout.write(self.style.ERROR("such portfolio id does not exist"))
+            # self.stdout.write(self.style.ERROR("such portfolio id does not exist"))
+            log.error("Portfolio_DoesNotExist", error='Portfolio does not exist')
             redis_server.xack(stream_name, group_name, stream_id)
 
 
@@ -58,13 +65,16 @@ class Command(BaseCommand):
         worker_name = "django_database_worker"
         multiplier = Decimal(settings.SYSTEM_PRECISION_MULTIPLIER)
 
+        log = logger.bind(service="cancelled_orders")
+
         try:
             redis_server.xgroup_create(stream_name,groupname=group_name, id=0, mkstream=True)
-            self.stdout.write(self.style.SUCCESS(f"Stream Created {stream_name}"))
+            # self.stdout.write(self.style.SUCCESS(f"Stream Created {stream_name}"))
+            log.info("Stream_initialization", stream_name=stream_name, info=f'initialized {stream_name}')
         except redis.exceptions.ResponseError as e:
             if "BUSYGROUP Consumer Group name already exists" not in str(e):
                 raise e
-        self.stdout.write(self.style.SUCCESS(f"Starting Stream Consumer Group"))
+        log.info("Consumer_loop", info="Starting Streaming consumer loop")
 
         while True:
             try:
@@ -73,10 +83,9 @@ class Command(BaseCommand):
                     for stream_name,message in cancelled_trades:
                         # print(stream_name, message)
                         for stream_id , data in message:
-                            self.process_cancelled_trades_stream(data,multiplier,stream_id,redis_server,stream_name,group_name)
+                            self.process_cancelled_trades_stream(data,multiplier,stream_id,redis_server,stream_name,group_name, log)
             except Exception as e:
-                self.stdout.write(self.style.ERROR(f'an error {e} occuered'))
-
+                log.error("Daemon_down", error_detail=e ,error=f'Daemon shutting down because of Error : {e}')
 
 if __name__ == "__settle_cancelled_orders__":
     Command()

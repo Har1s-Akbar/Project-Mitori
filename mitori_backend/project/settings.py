@@ -1,4 +1,6 @@
 from pathlib import Path
+import structlog
+import logging
 from datetime import timedelta
 import os
 from dotenv import load_dotenv
@@ -31,6 +33,7 @@ INSTALLED_APPS = [
     'core_ledger.apps.CoreLedgerConfig',
     'rest_framework',
     'rest_framework_simplejwt',
+    "django_structlog",
     'rest_framework_simplejwt.token_blacklist',
 ]
 
@@ -69,6 +72,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "django_structlog.middlewares.RequestMiddleware",
 ]
 
 ROOT_URLCONF = 'project.urls'
@@ -124,6 +128,60 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+
+shared_processors=[
+    structlog.contextvars.merge_contextvars,
+    structlog.processors.add_log_level,
+    structlog.processors.format_exc_info,  
+    structlog.processors.TimeStamper(fmt="iso"),
+    structlog.processors.JSONRenderer(),
+]
+
+structlog.configure(
+    processors= shared_processors+[
+        structlog.stdlib.ProcessorFormatter.wrap_for_formatter
+    ],
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    wrapper_class=structlog.stdlib.BoundLogger,
+    cache_logger_on_first_use=True,
+)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "json": {
+            "()": structlog.stdlib.ProcessorFormatter,
+            "processor": structlog.processors.JSONRenderer(),
+        },
+        "console": {
+            "()": structlog.stdlib.ProcessorFormatter,
+            "processor": structlog.dev.ConsoleRenderer(),
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "console" if DEBUG else "json",
+        },
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+        },
+        "django_structlog": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "core_ledger": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
