@@ -9,8 +9,10 @@ from core_ledger.services import settle_cache
 import os
 from dotenv import load_dotenv
 from django.conf import settings
+import structlog
 
 load_dotenv()
+logger = structlog.get_logger(__name__)
 
 class Command(BaseCommand):
     help = "Custom Daemon for registering trades in postgres"
@@ -108,7 +110,7 @@ class Command(BaseCommand):
         group_name = "django_workers"
         worker_name = "django_database_worker"
         multiplier = settings.SYSTEM_PRECISION_MULTIPLIER
-
+        log = logger.bind(service="trade_registery")
         try:
             redis_server.xgroup_create(name=stream_name, groupname=group_name, id=0, mkstream=True)
             self.stdout.write(self.style.SUCCESS(f"Created with consumer group {group_name}"))
