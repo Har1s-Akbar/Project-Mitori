@@ -10,27 +10,25 @@ from core_ledger.models import Portfolio, Position, LedgerTransaction, Transacti
 from django.contrib.auth import get_user_model
 from core_ledger.management.commands.trade_registery import Command
 from core_ledger.services import redis_positions_portfolio_service
+import structlog
 
 from core_ledger.test.test_services import test_redis_client
 
+logging = structlog.getLogger(__name__)
 user = get_user_model()
 
 
 class TradeRegistryDaemonIntegrationTest(TransactionTestCase):
     def setUp(self):
-        # 1. Clear the real test Redis database
         test_redis_client.flushdb()
 
-        # 2. Setup Postgres State
         # Creating the user automatically fires your routine to create the Portfolio with 10,000 cash
         self.buyer = user.objects.create(id=uuid.uuid4(), email="buyer@test.com", is_kyc_verified=True, date_of_birth="1999-09-08", full_name="tarder")
         self.seller = user.objects.create(id=uuid.uuid4(), email="seller@test.com", is_kyc_verified=True, date_of_birth="1999-09-08", full_name="tarder")
 
-        # Simply fetch the auto-generated portfolios
         self.buyer_portfolio = Portfolio.objects.get(user=self.buyer)
         self.seller_portfolio = Portfolio.objects.get(user=self.seller)
 
-        # 3. Setup Seller Position (Must own shares to sell them)
         self.seller_position = Position.objects.create(
             portfolio=self.seller_portfolio, 
             asset_symbol='APP', 
@@ -38,14 +36,12 @@ class TradeRegistryDaemonIntegrationTest(TransactionTestCase):
             average_entry_price=Decimal('5.00')
         )
 
-        # 5. Stream Config
         self.multiplier = settings.SYSTEM_PRECISION_MULTIPLIER
         self.stream_name = "executed_trades_stream"
         self.group_name = "django_workers"
         self.worker_name = "test_worker"
 
 
-        # 7. Mock Trade Data
         self.raw_data = {
             'ticker': 'APP',
             'seller_id': str(self.seller.id),
@@ -55,6 +51,8 @@ class TradeRegistryDaemonIntegrationTest(TransactionTestCase):
             'price_setteled_at': int(Decimal("6") * self.multiplier)
         }
         self.message_data = {'data': json.dumps(self.raw_data)}
+
+        self.log = logging.bind(service="testing_trade_registery")
 
         self.cmd = Command()
     @patch('core_ledger.services.redis_client', test_redis_client)
@@ -75,24 +73,19 @@ class TradeRegistryDaemonIntegrationTest(TransactionTestCase):
         test_redis_client.hincrby(f'cache:positions:{self.seller.id}', 'locked_APP', int(Decimal("150") * self.multiplier))
 
 
-        # 1. INJECT REAL MESSAGE INTO STREAM
         real_message_id = test_redis_client.xadd(self.stream_name, self.message_data)
         
-        # 2. CREATE CONSUMER GROUP & READ IT (Puts it in the Pending Entries List - PEL)
         test_redis_client.xgroup_create(self.stream_name, self.group_name, id=0, mkstream=True)
         test_redis_client.xreadgroup(self.group_name, self.worker_name, {self.stream_name: ">"})
 
-        # ACT: Run the processor with the real redis client
         self.cmd.process_stream_message(
             real_message_id, self.message_data, test_redis_client, 
-            self.stream_name, self.group_name, self.multiplier
+            self.stream_name, self.group_name, self.multiplier, self.log
         )
 
-        # ASSERT 1: Postgres was updated
         self.buyer_portfolio.refresh_from_db()
         self.assertEqual(self.buyer_portfolio.cash_balance, Decimal('9100.00')) 
 
-        # ASSERT 2: Cache was updated (Proves on_commit hook fired real settle_cache)
         buyer_cash_cache = test_redis_client.hget(f'cache:portfolio:{self.buyer.id}', 'available_cash')
         safe_cash = Decimal(str(buyer_cash_cache)) / self.multiplier
         self.assertEqual(safe_cash, Decimal('9100.00'))
@@ -101,8 +94,6 @@ class TradeRegistryDaemonIntegrationTest(TransactionTestCase):
         safe_locked = Decimal(str(buyer_locked_cache or 0)) / self.multiplier
         self.assertEqual(safe_locked, Decimal('0.00'))
 
-        # ASSERT 3: Stream was ACK'd (Proves on_commit hook fired real XACK)
-        # xpending returns info about unacknowledged messages. If 'pending' is 0, XACK succeeded!
         pending_info = test_redis_client.xpending(self.stream_name, self.group_name)
         self.assertEqual(pending_info['pending'], 0)
 
@@ -126,7 +117,6 @@ class TradeRegistryDaemonIntegrationTest(TransactionTestCase):
         test_redis_client.xgroup_create(self.stream_name, self.group_name, id=0, mkstream=True)
         test_redis_client.xreadgroup(self.group_name, self.worker_name, {self.stream_name: ">"})
 
-        # SETUP: Manually insert a row proving this stream ID was already processed in the past
         LedgerTransaction.objects.create(
             portfolio=self.seller_portfolio,
             stream_order_id=f'{real_message_id}_{TransactionType.SELL.value}',
@@ -138,23 +128,19 @@ class TradeRegistryDaemonIntegrationTest(TransactionTestCase):
             asset_symbol='APP'
         )
 
-        # ACT: Process the duplicate
         self.cmd.process_stream_message(
             real_message_id, self.message_data, test_redis_client, 
-            self.stream_name, self.group_name, self.multiplier
+            self.stream_name, self.group_name, self.multiplier, self.log
         )
 
-        # ASSERT 1: DB was protected
         self.assertEqual(LedgerTransaction.objects.count(), 1)
         self.buyer_portfolio.refresh_from_db()
         self.assertEqual(self.buyer_portfolio.cash_balance, Decimal('10000.00')) 
 
-        # ASSERT 2: Redis Cache was protected (No double deduction)
         buyer_cash_cache = test_redis_client.hget(f'cache:portfolio:{self.buyer.id}', 'available_cash')
         safe_cash = Decimal(str(buyer_cash_cache)) / self.multiplier
         self.assertEqual(safe_cash, Decimal('8800.00')) # Only the setup lock remains
 
-        # ASSERT 3: The poison pill was still ACK'd so the stream doesn't hang
         pending_info = test_redis_client.xpending(self.stream_name, self.group_name)
         self.assertEqual(pending_info['pending'], 0)
 
@@ -167,11 +153,9 @@ class TradeRegistryDaemonIntegrationTest(TransactionTestCase):
         at the exact same microsecond.
         Proves `select_for_update` prevents the "lost update" anomaly.
         """
-        # 1. WARM CACHE FIRST (Resets Redis to $10,000)
         redis_positions_portfolio_service(self.buyer.id)
         redis_positions_portfolio_service(self.seller.id)
         
-        # 2. APPLY LOCKS SECOND 
         # We are simulating a 150 share order that got split into two partial fills.
         total_lock_amount = int(Decimal("150") * Decimal("8") * self.multiplier)
         test_redis_client.hincrby(f'cache:portfolio:{self.buyer.id}', 'available_cash', -total_lock_amount)
@@ -204,7 +188,7 @@ class TradeRegistryDaemonIntegrationTest(TransactionTestCase):
             connection.close() 
             self.cmd.process_stream_message(
                 message_id, data, test_redis_client, 
-                self.stream_name, self.group_name, self.multiplier
+                self.stream_name, self.group_name, self.multiplier, self.log
             )
             connection.close()
 
