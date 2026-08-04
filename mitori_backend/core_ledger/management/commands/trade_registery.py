@@ -17,7 +17,7 @@ logger = structlog.get_logger(__name__)
 class Command(BaseCommand):
     help = "Custom Daemon for registering trades in postgres"
 
-    def process_stream_message(self, message_id, data, redis_server, stream_name, group_name, multiplier):
+    def process_stream_message(self, message_id, data, redis_server, stream_name, group_name, multiplier, log):
         """
         Processes a single trade event from the Redis stream.
         Extracted for isolated unit testing.
@@ -29,32 +29,31 @@ class Command(BaseCommand):
         price_locked = Decimal(str(transaction_data['price_locked_by_user'])) / Decimal(str(multiplier))
         
         total = quantity_scaled_down * price_scaled_down
-        self.stdout.write(self.style.SUCCESS(f"Received Trade with ID {message_id} | ticker {transaction_data['ticker']}"))  
+        log.info("settled_trade_received", message_id , transaction_data['ticker'])
 
         try:
             with transaction.atomic():
-                # 1. THE IDEMPOTENCY GUARD
                 if LedgerTransaction.objects.filter(stream_order_id=f'{message_id}_{TransactionType.SELL.value}').exists():
-                    self.stdout.write(self.style.ERROR(f"Trade already settled, rejecting duplicate stream message with id {message_id}"))
+                    log.warning("duplication_rejection", {message_id}, reason="Trade already settled in the database , rejecting duplication.")
                     redis_server.xack(stream_name, group_name, message_id)
-                    return # Exit early, avoiding double settlement
+                    return 
 
-                # 2. ACQUIRE LOCKS
+                
                 buyer_portfolio = Portfolio.objects.select_for_update().get(user_id=transaction_data['buyer_id'])
                 seller_portfolio = Portfolio.objects.select_for_update().get(user_id=transaction_data['seller_id'])
 
-                # 3. SETTLE CASH
+            
                 buyer_portfolio.cash_balance -= total
                 buyer_portfolio.save()
                 seller_portfolio.cash_balance += total
                 seller_portfolio.save()
 
-                # 4. SETTLE SELLER POSITIONS
+                
                 seller_position = Position.objects.select_for_update().get(portfolio=seller_portfolio, asset_symbol=transaction_data['ticker'])
                 seller_position.quantity -= quantity_scaled_down
                 seller_position.save()
 
-                # 5. SETTLE BUYER POSITIONS
+                
                 try:
                     buyer_position = Position.objects.select_for_update().get(portfolio=buyer_portfolio, asset_symbol=transaction_data['ticker'])
                     buyer_position.average_entry_price = (buyer_position.average_entry_price * buyer_position.quantity + price_scaled_down * quantity_scaled_down) / (buyer_position.quantity + quantity_scaled_down)
@@ -68,7 +67,7 @@ class Command(BaseCommand):
                         average_entry_price=price_scaled_down
                     )
                 
-                # 6. CREATE AUDIT LOGS
+                
                 LedgerTransaction.objects.create(
                     portfolio=buyer_portfolio,
                     stream_order_id=f'{message_id}_{TransactionType.BUY.value}',
@@ -91,16 +90,16 @@ class Command(BaseCommand):
                     asset_symbol=transaction_data['ticker']
                 )
 
-                # 7. QUEUE POST-COMMIT HOOKS
+                
                 transaction.on_commit(lambda mid=message_id: redis_server.xack(stream_name, group_name, mid))
                 transaction.on_commit(lambda d=transaction_data: settle_cache(d, redis_server))
-                transaction.on_commit(lambda mid=message_id: self.stdout.write(self.style.SUCCESS(f"Order {mid} properly settled in database")))
+                transaction.on_commit(lambda mid=message_id: log.info("Trade_settled_successfully", message_id = message_id, execution_price=price_scaled_down))
 
         except IntegrityError as e:
-            self.stdout.write(self.style.WARNING(f'Race condition averted for {message_id}'))
+            log.warning("Race_condition", message_id=message_id, reason=f"Race condition averted for {message_id}")
             redis_server.xack(stream_name, group_name, message_id)
         except (utils.OperationalError, LedgerTransaction.DoesNotExist) as e:
-            self.stdout.write(self.style.ERROR(f"Settlement failed because {e}")) 
+            log.error("Trade_settlement_error", error=e , error=f"Error occuered settlement failed {e}") 
 
     def handle(self, *args, **options):
         REDIS_HOST = os.getenv("REDIS_HOST") or os.getenv("REDIS") or "localhost"
@@ -113,13 +112,12 @@ class Command(BaseCommand):
         log = logger.bind(service="trade_registery")
         try:
             redis_server.xgroup_create(name=stream_name, groupname=group_name, id=0, mkstream=True)
-            self.stdout.write(self.style.SUCCESS(f"Created with consumer group {group_name}"))
+            log.info("Stream_initialization", stream_name=stream_name, info=f'initialized {stream_name}')
         except redis.exceptions.ResponseError as e:
             if "BUSYGROUP Consumer Group name already exists" not in str(e):
                 raise e
                 
-        self.stdout.write(self.style.SUCCESS(f"Starting Streaming consumer loop"))
-        
+        log.info("Consumer_loop", info="Starting Streaming consumer loop")
         while True:
             try:
                 executed_trades = redis_server.xreadgroup(groupname=group_name, consumername=worker_name, streams={stream_name: '>'}, block=3000)
@@ -127,8 +125,7 @@ class Command(BaseCommand):
                     for stream_key, messages in executed_trades:
                         print(f"{stream_key} is stream key with message below")
                         for message_id, data in messages:
-                            # The infinite loop now just delegates to the testable function
-                            self.process_stream_message(message_id, data, redis_server, stream_name, group_name, multiplier)
+                            self.process_stream_message(message_id, data, redis_server, stream_name, group_name, multiplier,log)
             except Exception as e:
-                self.stdout.write(self.style.ERROR(f"error : {e}"))
-                time.sleep(5)
+                log.error("Daemon_down", error_detail=e ,error=f'Daemon shutting down because of Error : {e}')
+                time.sleep(2)
