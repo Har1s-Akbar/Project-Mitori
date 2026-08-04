@@ -117,7 +117,7 @@ async def place_order(order:OrderReq,
                 maxlen=100000,
                 approximate=True
             )
-            logger.info("trade_pushed_to_stream", trade_id=trade.trade_id, ticker=order.ticker)
+            logger.info("trade_pushed_to_stream", trade_id=new_order.order_id, ticker=new_order.ticker)
     return {
         "message":"Order Accepted",
         "order Id" : new_order.order_id,
