@@ -34,7 +34,7 @@ class Command(BaseCommand):
         try:
             with transaction.atomic():
                 if LedgerTransaction.objects.filter(stream_order_id=f'{message_id}_{TransactionType.SELL.value}').exists():
-                    log.warning("duplication_rejection", {message_id}, reason="Trade already settled in the database , rejecting duplication.")
+                    log.warning("duplication_rejection", message_id=message_id, reason="Trade already settled in the database , rejecting duplication.")
                     redis_server.xack(stream_name, group_name, message_id)
                     return 
 
