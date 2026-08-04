@@ -3,7 +3,7 @@ import structlog
 import sys
 import logging
 
-def configuer_fastapi_logging():
+def configure_fastapi_logging():
     def orjson_dumps(obj, **kwargs):
         return orjson.dumps(obj).decode('utf-8')
 
@@ -41,3 +41,6 @@ def configuer_fastapi_logging():
     for _log in ["uvicorn", "uvicorn.error", "uvicorn.access"]:
         logging.getLogger(_log).handlers = [handler]
         logging.getLogger(_log).propagate = False
+
+    logging.getLogger("uvicorn.access").handlers = []
+    logging.getLogger("uvicorn.access").handlers = False

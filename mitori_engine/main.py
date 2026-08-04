@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Request
 from pydantic import Field
 import uuid
 import uvicorn
@@ -16,16 +16,23 @@ from core.models import Order, Side
 import os
 from dotenv import load_dotenv
 from decimal import Decimal
+from .logger import configure_fastapi_logging
+import structlog
 
 load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app:FastAPI):
+    configure_fastapi_logging()
+    logger = structlog.getLogger(__name__)
+    logger.info("Mitori_Engine_Booting")
+
     pool = create_redis_pool()
     app.state.redis = redis.Redis(connection_pool=pool)
-
+    
     yield
 
+    logger.info("Mitori_Engine_Shutting_Down")
     await app.state.redis.aclose()
 
 app = FastAPI(
@@ -35,6 +42,16 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+logger = structlog.getLogger(__name__)
+
+@app.middleware("httpx")
+async def logging_middleware(request:Request, call_next):
+    structlog.contextvars.clear_contextvars()
+    correlation_id = str(uuid.uuid4())
+    structlog.contextvars.bind_contextvars(
+        correlation_id=correlation_id,
+        path = request.url.path
+    )
 
 @app.post("/order")
 async def place_order(order:OrderReq, 
@@ -56,15 +73,18 @@ async def place_order(order:OrderReq,
         is_canceled=False,
     )
 
-    print(f"new order id {new_order.order_id}" )
-    print(f" owner id is {new_order.order_owner_id}")
 
     target_book.add_order(new_order)
     executed_trades = target_book.execute()
 
     if executed_trades:
+        current_context = structlog.contextvars.get_contextvars()
+        correlation_id = current_context("correlation_id", "fallback_id")
+
+
         for trade in executed_trades:
             trade_dict = dataclasses.asdict(trade)
+            trade-dict['correlation_id'] = correlation_id
             trade_data = {
                 "ticker" : order.ticker,
                 "data": json.dumps(trade_dict, default=str)
@@ -75,7 +95,7 @@ async def place_order(order:OrderReq,
                 maxlen=100000,
                 approximate=True
             )
-
+            logger.info("trade_pushed_to_stream", trade_id=trade.trade_id, ticker=order.ticker)
     return {
         "message":"Order Accepted",
         "order Id" : new_order.order_id,
