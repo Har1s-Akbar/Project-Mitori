@@ -128,13 +128,18 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+
+shared_processors=[
+    structlog.contextvars.merge_contextvars,
+    structlog.processors.add_log_level,
+    structlog.processors.format_exc_info,  
+    structlog.processors.TimeStamper(fmt="iso"),
+    structlog.processors.JSONRenderer(),
+]
+
 structlog.configure(
-    processors=[
-        structlog.contextvars.merge_contextvars,
-        structlog.processors.add_log_level,
-        structlog.processors.format_exc_info,  
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.JSONRenderer(),   
+    processors= shared_processors+[
+        structlog.stdlib.ProcessorFormatter.wrap_for_formatter
     ],
     logger_factory=structlog.stdlib.LoggerFactory(),
     wrapper_class=structlog.stdlib.BoundLogger,
@@ -157,7 +162,7 @@ LOGGING = {
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
-            "formatter": "json",
+            "formatter": "console" if DEBUG else "json",
         },
     },
     "loggers": {
@@ -166,6 +171,11 @@ LOGGING = {
             "level": "INFO",
         },
         "django_structlog": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "core_ledger": {
             "handlers": ["console"],
             "level": "INFO",
             "propagate": False,

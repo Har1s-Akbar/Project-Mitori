@@ -99,7 +99,7 @@ class Command(BaseCommand):
             log.warning("Race_condition", message_id=message_id, reason=f"Race condition averted for {message_id}")
             redis_server.xack(stream_name, group_name, message_id)
         except (utils.OperationalError, LedgerTransaction.DoesNotExist) as e:
-            log.error("Trade_settlement_error", error=e , error=f"Error occuered settlement failed {e}") 
+            log.error("Trade_settlement_error", error=f"Error occuered settlement failed {e}") 
 
     def handle(self, *args, **options):
         REDIS_HOST = os.getenv("REDIS_HOST") or os.getenv("REDIS") or "localhost"
