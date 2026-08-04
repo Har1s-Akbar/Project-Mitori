@@ -26,7 +26,7 @@ class Command(BaseCommand):
         structlog.contextvars.clear_contextvars()
         transaction_data = json.loads(data['data'])  
 
-        correlation_id = transaction_data.get("correlation_id", "fallback_id")
+        correlation_id = transaction_data.get("correlation_id") or {message_id}
 
         structlog.contextvars.bind_contextvars(
             correlation_id=correlation_id,

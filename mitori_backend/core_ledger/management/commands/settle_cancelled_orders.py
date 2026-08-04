@@ -24,7 +24,7 @@ class Command(BaseCommand):
 
         cancelled_order_data = json.loads(data['data'])
 
-        correlation_id = cancelled_order_data['correlation_id']
+        correlation_id = cancelled_order_data.get('correlation_id') or {stream_id}
 
         structlog.contextvars.bind_contextvars(
             correlation_id=correlation_id,

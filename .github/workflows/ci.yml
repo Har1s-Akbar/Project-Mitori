@@ -105,4 +105,4 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - run: pytest
+      - run: pytest --asyncio-mode=auto
