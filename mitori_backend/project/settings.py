@@ -151,7 +151,7 @@ LOGGING = {
         },
         "console": {
             "()": structlog.stdlib.ProcessorFormatter,
-            "processor": structlog.processors.ConsoleRenderer(),
+            "processor": structlog.dev.ConsoleRenderer(),
         },
     },
     "handlers": {
