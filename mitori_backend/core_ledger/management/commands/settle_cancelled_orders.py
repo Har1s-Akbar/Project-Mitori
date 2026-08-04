@@ -62,10 +62,9 @@ class Command(BaseCommand):
                     lambda message_id = stream_id : redis_server.xack(stream_name, group_name, message_id)
                     )
                 transaction.on_commit(
-                    lambda message_id =stream_id :log_binded.info("Cancelled_order_settled", info="Cnacelled order settled in the database")
+                    lambda message_id =stream_id :log_binded.info("cancelled_order_settled", status="success", message_id=message_id)
                 )
         except Portfolio.DoesNotExist:
-            # self.stdout.write(self.style.ERROR("such portfolio id does not exist"))
             log_binded.error("Portfolio_DoesNotExist", error='Portfolio does not exist')
             redis_server.xack(stream_name, group_name, stream_id)
         finally:

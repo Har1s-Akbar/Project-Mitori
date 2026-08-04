@@ -16,7 +16,7 @@ from core.models import Order, Side
 import os
 from dotenv import load_dotenv
 from decimal import Decimal
-from .logger import configure_fastapi_logging
+from logger import configure_fastapi_logging
 import structlog
 import time 
 
@@ -48,7 +48,7 @@ logger = structlog.getLogger(__name__)
 @app.middleware("httpx")
 async def logging_middleware(request:Request, call_next):
     if request.url.path in ["/health", "/metrics", "/docs", "/openapi.json"]:
-        return call_next(request)
+        return await call_next(request)
 
     structlog.contextvars.clear_contextvars()
     correlation_id = str(uuid.uuid4())
@@ -59,7 +59,7 @@ async def logging_middleware(request:Request, call_next):
     start_time = time.perf_counter()
     try:
         response = await call_next(request)
-        process_time = time.perf_counter() = start_time
+        process_time = time.perf_counter() - start_time
         logger.info(
             "http_request_processed",
             status_code = response.status_code,
@@ -101,12 +101,12 @@ async def place_order(order:OrderReq,
 
     if executed_trades:
         current_context = structlog.contextvars.get_contextvars()
-        correlation_id = current_context("correlation_id", "fallback_id")
+        correlation_id = current_context.get("correlation_id", "fallback_id")
 
 
         for trade in executed_trades:
             trade_dict = dataclasses.asdict(trade)
-            trade-dict['correlation_id'] = correlation_id
+            trade_dict['correlation_id'] = correlation_id
             trade_data = {
                 "ticker" : order.ticker,
                 "data": json.dumps(trade_dict, default=str)
@@ -137,12 +137,14 @@ async def delete_order(order_id : str, ticker:str,redis_client : redis.Redis = D
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order does not exist")
 
     current_context = structlog.contextvars.get_contextvars()
-    correlation_id = current_context("correlation_id", "fallback_id")
+    correlation_id = current_context.get("correlation_id", "fallback_id")
     user_id = str(order_canceled.order_owner_id)
     pipeline = redis_client.pipeline()
     async with pipeline:
         cancelled_trade_dict = dataclasses.asdict(order_canceled)
-        cancelled_trade_data['correlation_id'] = correlation_id
+
+        cancelled_trade_dict['correlation_id'] = correlation_id
+
         cancelled_trade_data = {
             "ticker" : ticker,
             "data": json.dumps(cancelled_trade_dict, default=str)

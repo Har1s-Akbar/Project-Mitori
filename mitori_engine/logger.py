@@ -25,7 +25,8 @@ def configure_fastapi_logging():
     )
 
     formatter = structlog.stdlib.ProcessorFormatter(
-        processor=[
+        foreign_pre_chain=shared_processors,
+        processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,
             structlog.processors.JSONRenderer(serializer=orjson_dumps)
         ],

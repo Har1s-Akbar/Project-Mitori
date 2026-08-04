@@ -104,7 +104,7 @@ class Command(BaseCommand):
                 
                 transaction.on_commit(lambda mid=message_id: redis_server.xack(stream_name, group_name, mid))
                 transaction.on_commit(lambda d=transaction_data: settle_cache(d, redis_server))
-                transaction.on_commit(lambda mid=message_id: log.info("Trade_settled_successfully", message_id = message_id, execution_price=price_scaled_down))
+                transaction.on_commit(lambda mid=message_id: log.info("trade_settled_successfully", execution_price=price_scaled_down))
 
         except IntegrityError as e:
             log_binded.warning("Race_condition", message_id=message_id, reason=f"Race condition averted for {message_id}")
