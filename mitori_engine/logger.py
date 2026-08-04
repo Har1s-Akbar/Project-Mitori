@@ -37,11 +37,13 @@ def configure_fastapi_logging():
 
     root_logger = logging.getLogger()
     root_logger.handlers = [handler]
-    root_logger.setLevel= [logging.INFO]
+    root_logger.setLevel(logging.INFO) 
 
     for _log in ["uvicorn", "uvicorn.error", "uvicorn.access"]:
-        logging.getLogger(_log).handlers = [handler]
-        logging.getLogger(_log).propagate = False
+        logger_instance = logging.getLogger(_log)
+        logger_instance.handlers = [handler]
+        logger_instance.propagate = False
 
-    logging.getLogger("uvicorn.access").handlers = []
-    logging.getLogger("uvicorn.access").handlers = False
+    access_logger = logging.getLogger("uvicorn.access")
+    access_logger.handlers = []
+    access_logger.propagate = False
