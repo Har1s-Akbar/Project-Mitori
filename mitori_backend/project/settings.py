@@ -131,10 +131,10 @@ AUTH_PASSWORD_VALIDATORS = [
 
 shared_processors=[
     structlog.contextvars.merge_contextvars,
-    structlog.processors.add_log_level,
-    structlog.processors.format_exc_info,  
+    structlog.stdlib.add_logger_name,
+    structlog.stdlib.add_log_level,
     structlog.processors.TimeStamper(fmt="iso"),
-    structlog.processors.JSONRenderer(),
+    structlog.processors.format_exc_info,
 ]
 
 structlog.configure(
@@ -152,11 +152,17 @@ LOGGING = {
     "formatters": {
         "json": {
             "()": structlog.stdlib.ProcessorFormatter,
-            "processor": structlog.processors.JSONRenderer(),
+            "processors": [
+                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                structlog.processors.JSONRenderer(),
+            ]
         },
         "console": {
             "()": structlog.stdlib.ProcessorFormatter,
-            "processor": structlog.dev.ConsoleRenderer(),
+            "processors": [
+                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                structlog.dev.ConsoleRenderer(),
+                ]
         },
     },
     "handlers": {
