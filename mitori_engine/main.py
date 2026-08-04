@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 from decimal import Decimal
 from .logger import configure_fastapi_logging
 import structlog
+import time 
 
 load_dotenv()
 
@@ -46,12 +47,33 @@ logger = structlog.getLogger(__name__)
 
 @app.middleware("httpx")
 async def logging_middleware(request:Request, call_next):
+    if request.url.path in ["/health", "/metrics", "/docs", "/openapi.json"]:
+        return call_next(request)
+
     structlog.contextvars.clear_contextvars()
     correlation_id = str(uuid.uuid4())
     structlog.contextvars.bind_contextvars(
         correlation_id=correlation_id,
         path = request.url.path
     )
+    start_time = time.perf_counter()
+    try:
+        response = await call_next(request)
+        process_time = time.perf_counter() = start_time
+        logger.info(
+            "http_request_processed",
+            status_code = response.status_code,
+            duration_ms= round(process_time*1000,2)
+        )
+        return response
+    except Exception as e:
+        process_time = time.perf_counter() - start_time
+        logger.exception(
+            "http_request_failed",
+            duration_ms=round(process_time*1000,2)
+        )
+        raise
+
 
 @app.post("/order")
 async def place_order(order:OrderReq, 

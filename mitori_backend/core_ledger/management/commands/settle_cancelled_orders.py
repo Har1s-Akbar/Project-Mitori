@@ -19,6 +19,7 @@ class Command(BaseCommand):
     help = "Custom Daemon for settlement of cancelled orders"
 
     def process_cancelled_trades_stream(self, data, multiplier, stream_id,redis_server, stream_name, group_name, log):
+
         cancelled_order_data = json.loads(data['data'])
         scaled_down_price = Decimal(str(cancelled_order_data['price']))/multiplier
                             

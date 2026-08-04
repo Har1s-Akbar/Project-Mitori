@@ -22,19 +22,30 @@ class Command(BaseCommand):
         Processes a single trade event from the Redis stream.
         Extracted for isolated unit testing.
         """
+
+        structlog.contextvars.clear_contextvars()
         transaction_data = json.loads(data['data'])  
+
+        correlation_id = transaction_data.get("correlation_id", "fallback_id")
+
+        structlog.contextvars.bind_contextvars(
+            correlation_id=correlation_id,
+            message_id=message_id,
+            ticker=transaction_data.get('ticker')
+        )
+        log_binded = log.bind()
         
         price_scaled_down = Decimal(str(transaction_data['price_setteled_at'])) / Decimal(str(multiplier))
         quantity_scaled_down = Decimal(str(transaction_data['quantity'])) / Decimal(str(multiplier))
         price_locked = Decimal(str(transaction_data['price_locked_by_user'])) / Decimal(str(multiplier))
         
         total = quantity_scaled_down * price_scaled_down
-        log.info("settled_trade_received", message_id , transaction_data['ticker'])
+        log_binded.info("settled_trade_received", message_id , transaction_data['ticker'])
 
         try:
             with transaction.atomic():
                 if LedgerTransaction.objects.filter(stream_order_id=f'{message_id}_{TransactionType.SELL.value}').exists():
-                    log.warning("duplication_rejection", message_id=message_id, reason="Trade already settled in the database , rejecting duplication.")
+                    log_binded.warning("duplication_rejection", message_id=message_id, reason="Trade already settled in the database , rejecting duplication.")
                     redis_server.xack(stream_name, group_name, message_id)
                     return 
 
@@ -96,10 +107,12 @@ class Command(BaseCommand):
                 transaction.on_commit(lambda mid=message_id: log.info("Trade_settled_successfully", message_id = message_id, execution_price=price_scaled_down))
 
         except IntegrityError as e:
-            log.warning("Race_condition", message_id=message_id, reason=f"Race condition averted for {message_id}")
+            log_binded.warning("Race_condition", message_id=message_id, reason=f"Race condition averted for {message_id}")
             redis_server.xack(stream_name, group_name, message_id)
         except (utils.OperationalError, LedgerTransaction.DoesNotExist) as e:
-            log.error("Trade_settlement_error", error=f"Error occuered settlement failed {e}") 
+            log_binded.error("Trade_settlement_error", error=f"Error occuered settlement failed {e}") 
+        finally:
+            structlog.contextvars.clear_contextvars()
 
     def handle(self, *args, **options):
         REDIS_HOST = os.getenv("REDIS_HOST") or os.getenv("REDIS") or "localhost"
@@ -123,7 +136,6 @@ class Command(BaseCommand):
                 executed_trades = redis_server.xreadgroup(groupname=group_name, consumername=worker_name, streams={stream_name: '>'}, block=3000)
                 if executed_trades:
                     for stream_key, messages in executed_trades:
-                        print(f"{stream_key} is stream key with message below")
                         for message_id, data in messages:
                             self.process_stream_message(message_id, data, redis_server, stream_name, group_name, multiplier,log)
             except Exception as e:
