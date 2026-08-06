@@ -56,6 +56,7 @@ In this section i will go over the experimental methodology and map out
 ### 4.1- Independent Variables
 These are the variables that be changing throughout the benchmarking.
 |**variables**|**Levels**|**Constraints**|
+|-------------|----------|---------------|
 |*Engine Implementation*|*Python* & *C++ with pybind11*|*C++ must use similar semantics and implementation*|
 |*Orderbook Depth*|* 1k, 25k, 50k*|*Must be preseeded*|
 |*Request Rate*|* 500,, 2k, 5k*|*use open model load*|
@@ -66,6 +67,7 @@ These are the variables that be changing throughout the benchmarking.
 These are the variables which are our main concern , they will yield different values based on the variance of independent variables and they will form the result of this research
 
 |**variables**|**Defination**|
+|-------------|--------------|
 |*Throughput*|*RPS at a specific latency threshold*|
 |*Execution Time*|*Time taken by an order to be exxecuted algorithmically*|
 |*API response latency*|*Total time required by a request including JWT and dependency resolution*|
@@ -74,6 +76,7 @@ These are the variables which are our main concern , they will yield different v
 These are the variables that should remain constant throughout the experimentation
 
 |**variables**|**why**|
+|-------------|-------|
 |*Payload Schema*|*JSON size must remain constant*|
 |*Order composition Ratio*|*Limit order / Market Order ratio shall remain constant for each phase*|
 |*GC Collection State*|*Explicitly disabled for Phase 1 pure-engine tests; enabled for Phase 2 API tests*|
