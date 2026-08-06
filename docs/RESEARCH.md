@@ -129,10 +129,10 @@ In this section warm-up and sampling for the research is explained
 ### 4.4.5 Statistical Significance and Non parametric Testing
 Due to the right-skewed nature of network latency, central tendencies will be compared using the non-parametric Mann-Whitney U test a = 0.05, and tail latencies p99 will be evaluated using bootstrapped 95% confidence intervals
 
-## 4.5 Synthetic Order Generation
+### 4.5 Synthetic Order Generation
 To gaurantee deterministic execution and identical orders for each implementation, the order flow is pre generated and saved to disk prior to benchmarking
 ### 4.5.1 Generation
- Order sequences are are synthesized using a predefined pseudorandom number generator (PRNG) initialized with a static global seed (SEED = 39).
+Order sequences are are synthesized using a predefined pseudorandom number generator (PRNG) initialized with a static global seed (SEED = 39).
 - **Price Distribution:** *Prices are determined by using a gaussian random walk anchored around 100, standard deviation is tuned to maintain a realistic spread and simulate high frequency behaviour*
 - **Order Composition:** *The flow maintains a strict ratio of 70% Limit Orders to 30% Market Orders.*
 - **Side Distribution:** *Buy and Sell sides are uniformly distributed (50/50 probability).*
