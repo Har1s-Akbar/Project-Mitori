@@ -16,13 +16,13 @@ is python `heapq` based matching engine in python efficient as compared to c++?
 In the full HTTP request path, what percentage of end-to-end latency is attributable to the matching engine versus I/O and middleware overhead?
 
 ## Hypothesis
-**H1 Throughput Hypothesis**
+**H1 — Throughput Hypothesis**
 > Under High concurent load upto (5000 RPS), the c++ and pybind11 implementation will fail to demonstrate a statistically significant throughput advantage over python native implementation. The overhead introduced by the FFI(foreign function interface) and unboxing of pydantic models into c++ data structures will mask the algorithmic speed of c++, resulting in I/O and serialization bottleneck
 
-**H2 Algorithmic Hypothesis**
+**H2 — Algorithmic Hypothesis**
 > A C++ order book implementation (exposed via pybind11) will exhibit lower matching latency than the Python `heapq` implementation. The speedup will increase with book depth due to memory locality and reduced allocation overhead.
 
-### H3 — Systems Hypothesis
+**H3 — Systems Hypothesis**
 > In the full API request path, the language-level matching speedup will be attenuated by I/O and serialization overhead. The contribution of matching latency to total API latency will fall below a threshold where language rewrite is not the optimal optimization target.
 
 ## 3. System Architecture & Measurement Boundaries
@@ -48,18 +48,18 @@ For more indepth architectural decisions and nuances i would refer you to the RE
 
 ## 4. Experimental Methodology
 In this section i will go over the experimental methodology and map out
-**4.1- Independent Variables**
-**4.2- Dependent Variables**
-**4.3- Constant Variables**
-**4.4- Environment & Infrastructure**
+    **4.1- Independent Variables**
+    **4.2- Dependent Variables**
+    **4.3- Constant Variables**
+    **4.4- Environment & Infrastructure**
 
 ### 4.1- Independent Variables
 These are the variables that be changing throughout the benchmarking.
 |**variables**|**Levels**|**Constraints**|
 |-------------|----------|---------------|
 |*Engine Implementation*|*Python* & *C++ with pybind11*|*C++ must use similar semantics and implementation*|
-|*Orderbook Depth*|* 1k, 25k, 50k*|*Must be preseeded*|
-|*Request Rate*|* 500,, 2k, 5k*|*use open model load*|
+|*Orderbook Depth*|*1k, 25k, 50k*|*Must be preseeded*|
+|*Request Rate*|*500, 2k, 5k*|*use open model load*|
 
 *Depth and rate will be measured in 3x3 matrix , it gives us 9-cell experimental matrix and multiplied with our third independent variable engine it will be 18-cell experimental matrix*
 
@@ -109,21 +109,33 @@ Full description of all the software dependencies and their versions can be foun
 Because the host operating system is Windows, the microservice architecture is virtualized through Doccker dekstop leveraging windows subsystem for Linux.
 To prevent latency spikes caused by docker moving the threads across cores during the benchmarking the containers are pinned to specific cores.
 Containerized application and the containers for specific services are pinnned to specific cores.
-**FastAPI & Engine:** *are pinned to performance cores for maximum performance and throughput*
-**Redis and Djnago:** *are pinned to efficient cores to prevent them from stealinng resources from the performance cores and affecting the order matching and API latency*
-**Load Generators** *are pinned to remaining core for isolated efficienncy*
-**Memory Limits:** *Hard Memory constraints are added to docker to prevent it from exhasting the 8GB available memoryy completely which would trigger swapping and invalidating the memory latency*
+    **FastAPI & Engine:** *are pinned to performance cores for maximum performance and throughput*
+    **Redis and Djnago:** *are pinned to efficient cores to prevent them from stealinng resources from the performance cores and affecting the order matching and API latency*
+    **Load Generators** *are pinned to remaining core for isolated efficienncy*
+    **Memory Limits:** *Hard Memory constraints are added to docker to prevent it from exhasting the 8GB available memoryy completely which would trigger swapping and invalidating the memory latency*
 
 #### 4.4.3 Network Constraints and optimization
 Due to host machine being a Windows operating system , and limitation of docker on the windows the network directive `--network host` will not fully bypass the NAT (Network Address Translation).
 Consequently the API response latency will include the network overhead.
 To maximize the throughput with these constraints
-- **File Descriptors:***The open file descriptor limit within the WSL2 kernel is elevated to 65,535 `(ulimit -n 65535)` to prevent socket exhaustion during peak Request Per Second (RPS) loads*
+    **File Descriptors:** *The open file descriptor limit within the WSL2 kernel is elevated to 65,535 `(ulimit -n 65535)` to prevent socket exhaustion during peak Request Per Second (RPS) loads*
 
 #### 4.4.4 Warm-up Protocol and Sampling
-**Warm-Up Phase:** *Prior to recording telemetry for any experimental cell, an untimed warm-up load of 5,000 requests is executed. Data generated during this phase is explicitly discarded*
-**Sample Size (N) and Duration:** *Each of the 18 experimental cells is executed across N = 5 independent test trials. To capture potential queue degradation , each trial sustains the target request rate for exactly 30 seconds.*
-**Reset:** *Between individual trials, the memory state is cleared via Python explicit garbage collection (gc.collect()), Redis cache flush (FLUSHALL), and database transaction rollback to guarantee clean state of the memory, database and redis*
+In this section warm-up and sampling for the research is explained 
+    **Warm-Up Phase:** *Prior to recording telemetry for any experimental cell, an untimed warm-up load of 5,000 requests is executed. Data generated during this phase is explicitly discarded*
+    **Sample Size (N) and Duration:** *Each of the 18 experimental cells is executed across N = 5 independent test trials. To capture potential queue degradation , each trial sustains the target request rate for exactly 30 seconds.*
+    **Reset:** *Between individual trials, the memory state is cleared via Python explicit garbage collection (gc.collect()), Redis cache flush (FLUSHALL), and database transaction rollback to guarantee clean state of the memory, database and redis and then redis state is reseeded again for the next test*
 
-### Statistical Significance and Non parametric Testing
+### 4.4.5 Statistical Significance and Non parametric Testing
 Due to the right-skewed nature of network latency, central tendencies will be compared using the non-parametric Mann-Whitney U test a = 0.05, and tail latencies p99 will be evaluated using bootstrapped 95% confidence intervals
+
+## 4.5 Synthetic Order Generation
+To gaurantee deterministic execution and identical orders for each implementation, the order flow is pre generated and saved to disk prior to benchmarking
+### 4.5.1 Generation
+ Order sequences are are synthesized using a predefined pseudorandom number generator (PRNG) initialized with a static global seed (SEED = 39).
+    **Price Distribution:** *Prices are determined by using a gaussian random walk anchored around 100, standard deviation is tuned to maintain a realistic spread and simulate high frequency behaviour*
+    **Order Composition:** *The flow maintains a strict ratio of 70% Limit Orders to 30% Market Orders.*
+    **Side Distribution:** *Buy and Sell sides are uniformly distributed (50/50 probability).*
+
+### 4.5.2 Replay
+generated orders will be saved in a file and saved on disk , load generator will load it serialize it into ordered JSON and fire it at the system, that way will make sure that both engine get identical data and increasing the credibility of the answered questions at the same time.
