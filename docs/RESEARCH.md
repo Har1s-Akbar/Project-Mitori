@@ -56,16 +56,18 @@ In this section i will go over the experimental methodology and map out
 ### 4.1- Independent Variables
 These are the variables that be changing throughout the benchmarking.
 |**variables**|**Levels**|**Constraints**|
+|-------------|----------|---------------|
 |*Engine Implementation*|*Python* & *C++ with pybind11*|*C++ must use similar semantics and implementation*|
-|*Orderbook Depth*|*100, 1k, 10k, 25k, 50k*|*Must be preseeded*|
-|*Request Rate*|*100, 500, 1k , 2k, 5k*|*use open model load*|
+|*Orderbook Depth*|* 1k, 25k, 50k*|*Must be preseeded*|
+|*Request Rate*|* 500,, 2k, 5k*|*use open model load*|
 
-*Depth and rate will be measured in 5x5 matrix , it gives us 25-cell experimental matrix and multiplied with our third independent variable engine it will be 50-cell experimental matrix*
+*Depth and rate will be measured in 3x3 matrix , it gives us 9-cell experimental matrix and multiplied with our third independent variable engine it will be 18-cell experimental matrix*
 
 ### 4.2- Dependent Variables
 These are the variables which are our main concern , they will yield different values based on the variance of independent variables and they will form the result of this research
 
 |**variables**|**Defination**|
+|-------------|--------------|
 |*Throughput*|*RPS at a specific latency threshold*|
 |*Execution Time*|*Time taken by an order to be exxecuted algorithmically*|
 |*API response latency*|*Total time required by a request including JWT and dependency resolution*|
@@ -74,6 +76,7 @@ These are the variables which are our main concern , they will yield different v
 These are the variables that should remain constant throughout the experimentation
 
 |**variables**|**why**|
+|-------------|-------|
 |*Payload Schema*|*JSON size must remain constant*|
 |*Order composition Ratio*|*Limit order / Market Order ratio shall remain constant for each phase*|
 |*GC Collection State*|*Explicitly disabled for Phase 1 pure-engine tests; enabled for Phase 2 API tests*|
@@ -115,4 +118,12 @@ Containerized application and the containers for specific services are pinnned t
 Due to host machine being a Windows operating system , and limitation of docker on the windows the network directive `--network host` will not fully bypass the NAT (Network Address Translation).
 Consequently the API response latency will include the network overhead.
 To maximize the throughput with these constraints
-- **File Descriptors:***The open file descriptor limit within the WSL2 kernel is elevated to 65,535 `(ulimit -n 65535)` to prevent socket exhaustion during peak Request Per Second (RPS) loads.*
+- **File Descriptors:***The open file descriptor limit within the WSL2 kernel is elevated to 65,535 `(ulimit -n 65535)` to prevent socket exhaustion during peak Request Per Second (RPS) loads*
+
+#### 4.4.4 Warm-up Protocol and Sampling
+**Warm-Up Phase:** *Prior to recording telemetry for any experimental cell, an untimed warm-up load of 5,000 requests is executed. Data generated during this phase is explicitly discarded*
+**Sample Size (N) and Duration:** *Each of the 18 experimental cells is executed across N = 5 independent test trials. To capture potential queue degradation , each trial sustains the target request rate for exactly 30 seconds.*
+**Reset:** *Between individual trials, the memory state is cleared via Python explicit garbage collection (gc.collect()), Redis cache flush (FLUSHALL), and database transaction rollback to guarantee clean state of the memory, database and redis*
+
+### Statistical Significance and Non parametric Testing
+Due to the right-skewed nature of network latency, central tendencies will be compared using the non-parametric Mann-Whitney U test a = 0.05, and tail latencies p99 will be evaluated using bootstrapped 95% confidence intervals
