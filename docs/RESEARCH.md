@@ -60,7 +60,7 @@ These are the variables that be changing throughout the benchmarking.
 |*Orderbook Depth*|*100, 1k, 10k, 25k, 50k*|*Must be preseeded*|
 |*Request Rate*|*100, 500, 1k , 2k, 5k*|*use open model load*|
 
-*Depth and rate will be measured in 2x2 matrix , [low,low low,high high,low high,high]*
+*Depth and rate will be measured in 5x5 matrix , it gives us 25-cell experimental matrix and multiplied with our third independent variable engine it will be 50-cell experimental matrix*
 
 ### 4.2- Dependent Variables
 These are the variables which are our main concern , they will yield different values based on the variance of independent variables and they will form the result of this research
@@ -79,11 +79,40 @@ These are the variables that should remain constant throughout the experimentati
 |*GC Collection State*|*Explicitly disabled for Phase 1 pure-engine tests; enabled for Phase 2 API tests*|
 
 ### 4.4 Environment & Infrastructure
-Experimental environment and infrastructure are really important for the proper result of an experiment , faulty or broken environment can pollute the results of an experiment.
+To ensure reproducible latency measurements , all benchmarking are done on a dedicated local compute node.
+Given the constraints of virtualizing on non-linux machines certain constraints and tunnings  were applied to mitigate this contraint.
 
-#### General Configuration
-These are general configurations , before testing proper and exact environment details will be mentioned
-*1- Benchmarking will be done on local machine no cloud service will be used*
-*2- Benchmarking will be done in docker and for it docker will be configuered accordingly*
-*-Containers wil be pinned to CPU cores to limit and avoid linux scheduler from moving threads across available cores to avoid unintentional letency overhead*
-*3-Docker default bridge network routes all traffic through NAT adding measurable network laatency to every api call, it will be configuered as well*
+#### 4.4.1 Hardware and OS and Software
+Machine on which the benchmarking will be performed is equipped with
+- *13th-generation Intel Core i7-1355U processor, featuring an asymmetric architecture of 10 physical cores (2 Performance cores, 8 Efficient cores) and 12 logical threads, operating at a base clock of 1.70 GHz*
+- *8 GB of physical memory and a 512 GB Samsung NVMe Solid State Drive (MZAL8512HDLU-00BL2)*
+
+OS and Docker configurations are
+*Host OS & SubSystem Windows 11 Enterprise build number 26200.8875*
+
+Full description of all the software dependencies and their versions can be found in requirements.txt of each service , major depenedencies and their versions are listed here 
+- *python==3.14.4 (64-bit)*
+- *C++ Toolchain: Container-native GCC compiler (Debian/Ubuntu default, typically v11.x or v12.x) utilizing -O3 -march=native release optimization flags and pybind11. (Note: Host-level MSYS2 Windows compilers were explicitly excluded to maintain Linux ABI compatibility).*
+- *fastapi==0.139.0*
+- *uvicorn==0.50.2*
+- *pydantic==2.13.4*
+- *Django==6.0.6*
+- *djangorestframework==3.17.1*
+- *psycopg2-binary==2.9.12*
+- *PyJWT==2.13.0*
+-*POSTGRESQL v16*
+
+#### 4.4.2 Virtualization and Container Isolation
+Because the host operating system is Windows, the microservice architecture is virtualized through Doccker dekstop leveraging windows subsystem for Linux.
+To prevent latency spikes caused by docker moving the threads across cores during the benchmarking the containers are pinned to specific cores.
+Containerized application and the containers for specific services are pinnned to specific cores.
+**FastAPI & Engine:** *are pinned to performance cores for maximum performance and throughput*
+**Redis and Djnago:** *are pinned to efficient cores to prevent them from stealinng resources from the performance cores and affecting the order matching and API latency*
+**Load Generators** *are pinned to remaining core for isolated efficienncy*
+**Memory Limits:** *Hard Memory constraints are added to docker to prevent it from exhasting the 8GB available memoryy completely which would trigger swapping and invalidating the memory latency*
+
+#### 4.4.3 Network Constraints and optimization
+Due to host machine being a Windows operating system , and limitation of docker on the windows the network directive `--network host` will not fully bypass the NAT (Network Address Translation).
+Consequently the API response latency will include the network overhead.
+To maximize the throughput with these constraints
+- **File Descriptors:***The open file descriptor limit within the WSL2 kernel is elevated to 65,535 `(ulimit -n 65535)` to prevent socket exhaustion during peak Request Per Second (RPS) loads.*
