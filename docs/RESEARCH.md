@@ -17,7 +17,8 @@ In the full HTTP request path, what percentage of end-to-end latency is attribut
 
 ## Hypothesis
 **H1 Throughput Hypothesis**
-> Under High concurent load upto (5000 RPS), the c++ and pybind11 implementation will fail to demonstrate a statistically high throughput over python native implementation. The overhead introduced by the FFI(foreign function interface) and unboxing of pydantic models into c++ data structures will mask the algorithmic speed of c++, resulting in I/O and serialization bottleneck
+> Under High concurent load upto (5000 RPS), the c++ and pybind11 implementation will fail to demonstrate a statistically significant throughput advantage over python native implementation. The overhead introduced by the FFI(foreign function interface) and unboxing of pydantic models into c++ data structures will mask the algorithmic speed of c++, resulting in I/O and serialization bottleneck
+
 **H2 Algorithmic Hypothesis**
 > A C++ order book implementation (exposed via pybind11) will exhibit lower matching latency than the Python `heapq` implementation. The speedup will increase with book depth due to memory locality and reduced allocation overhead.
 
@@ -51,3 +52,38 @@ In this section i will go over the experimental methodology and map out
 **4.2- Dependent Variables**
 **4.3- Constant Variables**
 **4.4- Environment & Infrastructure**
+
+### 4.1- Independent Variables
+These are the variables that be changing throughout the benchmarking.
+|**variables**|**Levels**|**Constraints**|
+|*Engine Implementation*|*Python* & *C++ with pybind11*|*C++ must use similar semantics and implementation*|
+|*Orderbook Depth*|*100, 1k, 10k, 25k, 50k*|*Must be preseeded*|
+|*Request Rate*|*100, 500, 1k , 2k, 5k*|*use open model load*|
+
+*Depth and rate will be measured in 2x2 matrix , [low,low low,high high,low high,high]*
+
+### 4.2- Dependent Variables
+These are the variables which are our main concern , they will yield different values based on the variance of independent variables and they will form the result of this research
+
+|**variables**|**Defination**|
+|*Throughput*|*RPS at a specific latency threshold*|
+|*Execution Time*|*Time taken by an order to be exxecuted algorithmically*|
+|*API response latency*|*Total time required by a request including JWT and dependency resolution*|
+
+### 4.3- Constant Vraiables
+These are the variables that should remain constant throughout the experimentation
+
+|**variables**|**why**|
+|*Payload Schema*|*JSON size must remain constant*|
+|*Order composition Ratio*|*Limit order / Market Order ratio shall remain constant for each phase*|
+|*GC Collection State*|*Explicitly disabled for Phase 1 pure-engine tests; enabled for Phase 2 API tests*|
+
+### 4.4 Environment & Infrastructure
+Experimental environment and infrastructure are really important for the proper result of an experiment , faulty or broken environment can pollute the results of an experiment.
+
+#### General Configuration
+These are general configurations , before testing proper and exact environment details will be mentioned
+*1- Benchmarking will be done on local machine no cloud service will be used*
+*2- Benchmarking will be done in docker and for it docker will be configuered accordingly*
+*-Containers wil be pinned to CPU cores to limit and avoid linux scheduler from moving threads across available cores to avoid unintentional letency overhead*
+*3-Docker default bridge network routes all traffic through NAT adding measurable network laatency to every api call, it will be configuered as well*
