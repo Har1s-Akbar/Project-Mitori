@@ -111,13 +111,19 @@ async def place_order(order:OrderReq,
                 "ticker" : order.ticker,
                 "data": json.dumps(trade_dict, default=str)
             }
-            await redis_client.xadd(
-                name="executed_trades_stream",
-                fields=trade_data,
-                maxlen=100000,
-                approximate=True
-            )
-            logger.info("trade_pushed_to_stream", trade_id=new_order.order_id, ticker=new_order.ticker)
+            get_current_bbo = target_book.get_current_bbo()
+            with redis_client.pipeline() as pipe:
+                pipe.xadd(
+                    name="executed_trades_stream",
+                    fields=trade_data,
+                    maxlen=100000,
+                    approximate=True
+                )
+                pipe.hset(
+                    f'ticker:{new_order.ticker}:bbo', mapping=get_current_bbo
+                )
+                pipe.execute()
+        logger.info("trade_pushed_to_stream", trade_id=new_order.order_id, ticker=new_order.ticker)
     return {
         "message":"Order Accepted",
         "order Id" : new_order.order_id,

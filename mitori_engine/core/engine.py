@@ -1,6 +1,11 @@
 import heapq
 from .models import Order, Trade, Side, Type
 import uuid
+from decimal import Decimal
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class OrderBook():
     ticker: str
@@ -133,3 +138,30 @@ class OrderBook():
 
     def get_specific_order_by_id(self, order_uuid):
         return self.active_uuids.get(str(order_uuid), None)
+
+    def get_current_bbo(self)-> dict:
+        multiplier = os.getenv("SYSTEM_PRECISION_MULTIPLIER")
+        best_ask = None
+        best_bid = None
+        while self.ask:
+            top_ask = self.bid[0][3]
+            if str(top_ask.order_id) not in self.canceled_uuids:
+                best_ask = Decimal(str(top_ask.price)) * multiplier
+                break
+            else:
+                heapq.heappop(self.ask)
+                self.canceled_uuids.remove(str(top_ask.order_id))
+
+        while self.bid:
+            top_bid = self.bid[0][3]
+            if str(top_bid.order_id) not in self.canceled_uuids:
+                best_bid = Decimal(str(top_bid.price)) * multiplier
+                break
+            else:
+                heapq.heappop(self.bid)
+                self.canceled_uuids.remove(str(top_bid.order_id))
+
+        return {
+            "best_ask_price" : int(best_ask) if best_ask else None,
+            "best_bid_price" : int(best_bid) if best_bid else None 
+        }
