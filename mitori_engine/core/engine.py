@@ -1,5 +1,5 @@
 import heapq
-from .models import Order, Trade, Side
+from .models import Order, Trade, Side, Type
 import uuid
 
 class OrderBook():
@@ -12,8 +12,17 @@ class OrderBook():
         self.active_uuids = {}
         self.canceled_uuids = set()
 
-    def add_order(self, order: Order):
-        
+    def process_order(self, order:Order) -> list[Trade]:
+        if order.type == Type.LIMIT: 
+            self.add_order(order)
+            return self.execute()
+        if order.type == Type.MARKET or getattr(order.type, "value", order.type) == Type.MARKET:
+            return self.process_market_orders_ioc(order)
+
+    def process_market_orders_ioc(self, order:Order):
+        pass
+
+    def add_order(self, order: Order):    
         order_id_str = str(order.order_id)
             
         if order.side == Side.SELL:
