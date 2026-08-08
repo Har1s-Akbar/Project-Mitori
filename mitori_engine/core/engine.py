@@ -19,8 +19,43 @@ class OrderBook():
         if order.type == Type.MARKET or getattr(order.type, "value", order.type) == Type.MARKET:
             return self.process_market_orders_ioc(order)
 
-    def process_market_orders_ioc(self, order:Order):
-        pass
+    def process_market_orders_ioc(self, order:Order) -> list[Trade]:
+        executed_trades = []
+
+        target_side = self.ask if order.side == Side.BUY else self.bid
+
+        while target_side and order.number_of_shares > 0:
+            best_resting = target_side[0][3]
+            resting_id_str = str(best_resting.order_id)
+
+            if resting_id_str in self.canceled_uuids:
+                heapq.heappop(target_side)
+                self.canceled_uuids.remove(resting_id_str)
+
+            transactioning_shares = min(order.number_of_shares, best_resting.number_of_shares)
+
+            order.number_of_shares -= transactioning_shares
+            best_resting.number_of_shares -= transactioning_shares
+
+            settled_price = best_resting.price
+
+            buyer_id = order.order_owner_id if order.side == Side.BUY else best_resting.order_owner_id
+            seller_id = order.order_owner_id if order.side == Side.SELL else best_resting.order_owner_id
+
+            executed_trades.append(Trade(
+                ticker=self.ticker,
+                quantity=transactioning_shares,
+                price_locked_by_user=None,
+                price_setteled_at=settled_price,
+                buyer_id=buyer_id,
+                seller_id=seller_id
+            ))
+
+            if best_resting.number_of_shares <= 0:
+                heapq.heappop(target_side)
+                self.active_uuids.pop(resting_id_str, None)
+
+            return executed_trades
 
     def add_order(self, order: Order):    
         order_id_str = str(order.order_id)
