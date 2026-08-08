@@ -8,10 +8,15 @@ class Side(str,Enum):
     SELL="sell"
     BUY ="buy"
 
+class Type(str,Enum):
+    MARKET = "market"
+    LIMIT = "limit"
+
 @dataclass(slots=True)
 class Order():
     ticker:str
     side:Side
+    type: Type
     price:Decimal
     number_of_shares:Decimal
     order_owner_id : uuid.UUID
