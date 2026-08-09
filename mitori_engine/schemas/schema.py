@@ -1,3 +1,4 @@
+from __future__ import annotations
 from core.models import Side, Type
 from core.engine import OrderBook
 from typing import Optional
