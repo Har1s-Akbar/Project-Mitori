@@ -7,6 +7,7 @@ import jwt
 from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from typing import Optional 
 from dotenv import load_dotenv
 
 from asgi_lifespan import LifespanManager
@@ -14,11 +15,10 @@ from httpx import AsyncClient, ASGITransport
 
 from main import app
 from schemas.schema import OrderReq
-from core.models import Side
+from core.models import Side, Type 
 
 load_dotenv()
 
-# BUG FIX 1: Cast the string environment variable to an integer
 MULTIPLIER = int(os.getenv("SYSTEM_PRECISION_MULTIPLIER", 100000000))
 
 @pytest_asyncio.fixture(scope="function")
@@ -40,10 +40,6 @@ async def test_redis():
 
 @pytest.fixture
 def test_request(test_redis):
-    """
-    Brilliant mock of the FastAPI Request object.
-    Injects the test_redis client cleanly into app.state.redis.
-    """
     class MockState:
         def __init__(self, redis_conn):
             self.redis = redis_conn
@@ -61,15 +57,24 @@ def test_request(test_redis):
 
 @pytest.fixture
 def order_factory():
-    def _order_create(ticker: str, side: Side, price: Decimal, number_of_shares: Decimal, order_owner_id: uuid.UUID):
+    def _order_create(
+        ticker: str, 
+        side: Side, 
+        number_of_shares: Decimal, 
+        order_owner_id: uuid.UUID,
+        order_type: Type = Type.LIMIT, 
+        price: Optional[Decimal] = None
+    ):
         return OrderReq(
             ticker=ticker,
             side=side,  
+            type=order_type,
             price=price,
             number_of_shares=number_of_shares,
             order_owner_id=order_owner_id
         )
     return _order_create
+
 
 @pytest.fixture
 def token_factory():
@@ -88,16 +93,24 @@ def token_factory():
         return jwt.encode(payload, secret, algorithm=algorithm)
     return _generate
 
+
 @pytest_asyncio.fixture
 async def seed_cash_factory(test_redis):
-    async def _seeding(owner_id: str, available_cash: Decimal):
+    async def _seeding(owner_id: str, available_cash: Decimal, ticker: str):
         stream_key = f'cache:portfolio:{owner_id}'
         set_values = {
             'available_cash': int(available_cash * MULTIPLIER),
             'locked_balance': int(0)
         }
         await test_redis.hset(stream_key, mapping=set_values)
+        
+        bbo_key = f'ticker:{ticker}:bbo'
+        await test_redis.hset(bbo_key, mapping={
+            'best_bid_price': int(Decimal(str(10.00))*MULTIPLIER),
+            'best_ask_price': int(Decimal(str(10.00))*MULTIPLIER)
+        })
     return _seeding
+
 
 @pytest_asyncio.fixture
 async def seed_shares_factory(test_redis):
@@ -108,12 +121,17 @@ async def seed_shares_factory(test_redis):
             f'locked_{ticker}': int(0)
         }
         await test_redis.hset(stream_key, mapping=set_values)
+        
+        bbo_key = f'ticker:{ticker}:bbo'
+        await test_redis.hset(bbo_key, mapping={
+            'best_bid_price': int(Decimal(str(10.00))*MULTIPLIER),
+            'best_ask_price': int(Decimal(str(10.00))*MULTIPLIER)
+        })
     return _seeding
 
 
 @pytest_asyncio.fixture(scope="function")
 async def async_client():
-    # BUG FIX 4: Patch os.environ, not os.getenv
     with patch.dict(os.environ, {"REDIS_DB_INDEX": "1"}):
         async with LifespanManager(app) as manager:
             transport = ASGITransport(app=manager.app)

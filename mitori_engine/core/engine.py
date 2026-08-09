@@ -1,6 +1,11 @@
 import heapq
-from .models import Order, Trade, Side
+from .models import Order, Trade, Side, Type
 import uuid
+from decimal import Decimal
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class OrderBook():
     ticker: str
@@ -12,8 +17,60 @@ class OrderBook():
         self.active_uuids = {}
         self.canceled_uuids = set()
 
-    def add_order(self, order: Order):
+    def process_order(self, order: Order) -> list[Trade]:
+        if order.type == Type.LIMIT: 
+            self.add_order(order)
+            return self.execute()
+            
+        if order.type == Type.MARKET or getattr(order.type, "value", order.type) == Type.MARKET:
+            return self.process_market_orders_ioc(order)
+
+    def process_market_orders_ioc(self, order: Order) -> list[Trade]:
+        executed_trades = []
+        target_side = self.ask if order.side == Side.BUY else self.bid
         
+        total_spent = Decimal("0.00")
+
+        while target_side and order.number_of_shares > 0:
+            best_resting = target_side[0][3]
+            resting_id_str = str(best_resting.order_id)
+
+            if resting_id_str in self.canceled_uuids:
+                heapq.heappop(target_side)
+                self.canceled_uuids.remove(resting_id_str)
+                continue
+
+            transactioning_shares = min(order.number_of_shares, best_resting.number_of_shares)
+            settled_price = best_resting.price
+
+            if order.side == Side.BUY:
+                trade_cost = Decimal(transactioning_shares) * settled_price
+                if order.max_authorized_funds is not None and (total_spent + trade_cost) > order.max_authorized_funds:
+                    break
+                total_spent += trade_cost
+
+            order.number_of_shares -= transactioning_shares
+            best_resting.number_of_shares -= transactioning_shares
+
+            buyer_id = order.order_owner_id if order.side == Side.BUY else best_resting.order_owner_id
+            seller_id = order.order_owner_id if order.side == Side.SELL else best_resting.order_owner_id
+
+            executed_trades.append(Trade(
+                ticker=self.ticker,
+                quantity=transactioning_shares,
+                price_locked_by_user=0,
+                price_setteled_at=settled_price,
+                buyer_id=buyer_id,
+                seller_id=seller_id
+            ))
+
+            if best_resting.number_of_shares <= 0:
+                heapq.heappop(target_side)
+                self.active_uuids.pop(resting_id_str, None)
+
+        return executed_trades
+
+    def add_order(self, order: Order):    
         order_id_str = str(order.order_id)
             
         if order.side == Side.SELL:
@@ -33,12 +90,12 @@ class OrderBook():
             best_ask = self.ask[0][3]
             
             if str(best_bid.order_id) in self.canceled_uuids:
-                heapq.heappop(self.bid)  # Pop bid from bid heap
+                heapq.heappop(self.bid)
                 self.canceled_uuids.remove(str(best_bid.order_id))
                 continue
                 
             if str(best_ask.order_id) in self.canceled_uuids:
-                heapq.heappop(self.ask)  # Pop ask from ask heap
+                heapq.heappop(self.ask) 
                 self.canceled_uuids.remove(str(best_ask.order_id))
                 continue
                 
@@ -47,24 +104,23 @@ class OrderBook():
                 
             if best_bid.price >= best_ask.price:
                 transactioning_shares = min(best_bid.number_of_shares, best_ask.number_of_shares)
-                best_ask.number_of_shares = best_ask.number_of_shares - transactioning_shares 
-                best_bid.number_of_shares = best_bid.number_of_shares - transactioning_shares
+                best_ask.number_of_shares -= transactioning_shares 
+                best_bid.number_of_shares -= transactioning_shares
 
-                #Determin the maker if the maker is either the seller or the buyer
                 if best_bid.date_time < best_ask.date_time:
-                    # The Buyer was resting in the book first. Their price wins.
                     settled_price = best_bid.price
                 else:
-                    # The Seller was resting in the book first. Their price wins.
                     settled_price = best_ask.price
+                    
                 trades_executed.append(Trade(
                     ticker=self.ticker,
                     quantity=transactioning_shares,
-                    price_locked_by_user=best_bid.price,
+                    price_locked_by_user=best_bid.price if best_bid.price else 0,
                     price_setteled_at=settled_price,
                     buyer_id=best_bid.order_owner_id,
                     seller_id=best_ask.order_owner_id
                 ))
+                
             if best_ask.number_of_shares <= 0:
                 heapq.heappop(self.ask)
                 self.active_uuids.pop(str(best_ask.order_id), None)
@@ -77,7 +133,6 @@ class OrderBook():
 
     def tombstone_delete(self, order_uuid):
         order_id_str = str(order_uuid)
-        
         order_delete = self.active_uuids.pop(order_id_str, None)
         
         if order_delete:
@@ -89,3 +144,30 @@ class OrderBook():
 
     def get_specific_order_by_id(self, order_uuid):
         return self.active_uuids.get(str(order_uuid), None)
+
+    def get_current_bbo(self) -> dict:
+        best_ask = None
+        best_bid = None
+        
+        while self.ask:
+            top_ask = self.ask[0][3]
+            if str(top_ask.order_id) not in self.canceled_uuids:
+                best_ask = str(top_ask.price)
+                break
+            else:
+                heapq.heappop(self.ask)
+                self.canceled_uuids.remove(str(top_ask.order_id))
+
+        while self.bid:
+            top_bid = self.bid[0][3]
+            if str(top_bid.order_id) not in self.canceled_uuids:
+                best_bid = str(top_bid.price)
+                break
+            else:
+                heapq.heappop(self.bid)
+                self.canceled_uuids.remove(str(top_bid.order_id))
+
+        return {
+            "best_ask_price" : best_ask if best_ask else int(0),
+            "best_bid_price" : best_bid if best_bid else int(0)
+        }
