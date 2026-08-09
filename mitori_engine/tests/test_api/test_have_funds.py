@@ -42,6 +42,7 @@ async def test_for_buy_order(test_redis, test_request):
         'available_cash': int(initial_balance),
         'locked_balance': 0
     }
+    
     await test_redis.hset(buyer_cache_portfolio_key_redis, mapping=buyer_portfolio_dict)
 
     order = OrderReq(

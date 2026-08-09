@@ -41,16 +41,16 @@ async def test_redis():
 @pytest.fixture
 def test_request(test_redis):
     class MockState:
-        def __init__(self, redis_conn):
-            self.redis = redis_conn
+        def __init__(self, redis):
+            self.redis = redis
 
     class MockApp:
-        def __init__(self, redis_conn):
-            self.state = MockState(redis_conn)
+        def __init__(self, redis):
+            self.state = MockState(redis)
 
     class MockRequest:
-        def __init__(self, redis_conn):
-            self.app = MockApp(redis_conn)
+        def __init__(self, redis):
+            self.app = MockApp(redis)
 
     return MockRequest(test_redis)
 
