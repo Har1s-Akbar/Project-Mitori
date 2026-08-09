@@ -40,10 +40,6 @@ async def test_redis():
 
 @pytest.fixture
 def test_request(test_redis):
-    """
-    Brilliant mock of the FastAPI Request object.
-    Injects the test_redis client cleanly into app.state.redis.
-    """
     class MockState:
         def __init__(self, redis_conn):
             self.redis = redis_conn
@@ -97,16 +93,24 @@ def token_factory():
         return jwt.encode(payload, secret, algorithm=algorithm)
     return _generate
 
+
 @pytest_asyncio.fixture
 async def seed_cash_factory(test_redis):
-    async def _seeding(owner_id: str, available_cash: Decimal):
+    async def _seeding(owner_id: str, available_cash: Decimal, ticker: str = "APP"):
         stream_key = f'cache:portfolio:{owner_id}'
         set_values = {
             'available_cash': int(available_cash * MULTIPLIER),
             'locked_balance': int(0)
         }
         await test_redis.hset(stream_key, mapping=set_values)
+        
+        bbo_key = f'ticker:{ticker}:bbo'
+        await test_redis.hset(bbo_key, mapping={
+            'best_bid': "10.00",
+            'best_ask': "10.00"
+        })
     return _seeding
+
 
 @pytest_asyncio.fixture
 async def seed_shares_factory(test_redis):
@@ -117,6 +121,12 @@ async def seed_shares_factory(test_redis):
             f'locked_{ticker}': int(0)
         }
         await test_redis.hset(stream_key, mapping=set_values)
+        
+        bbo_key = f'ticker:{ticker}:bbo'
+        await test_redis.hset(bbo_key, mapping={
+            'best_bid': "10.00",
+            'best_ask': "10.00"
+        })
     return _seeding
 
 

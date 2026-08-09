@@ -10,7 +10,8 @@ MARKET ={
     "APP": OrderBook("APP"),
     "TSLA": OrderBook("TSLA"),
     "AUX":OrderBook("AUX"),
-    "GOOGL":OrderBook("GOOGL")
+    "GOOGL":OrderBook("GOOGL"),
+    "AMD":OrderBook("AMD")
 }
 
 class OrderReq(BaseModel):

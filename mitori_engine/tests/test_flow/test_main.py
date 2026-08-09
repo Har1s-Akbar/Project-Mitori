@@ -31,15 +31,16 @@ async def test_secirity_features(
     price = Decimal("10")
     number_of_shares = Decimal("150")
     
-    await seed_cash_factory(owner_id=user_id, available_cash=Decimal("2000"))
+    await seed_cash_factory(owner_id=user_id, available_cash=Decimal("2000"), ticker=ticker)
     valid_token = token_factory(user_id=user_id, kyc_verified=kyc_status, expires_in_minutes=expires_in)
 
     order = order_factory(
         ticker=ticker,
         side=Side.BUY,
-        price=price,
         number_of_shares=number_of_shares,
-        order_owner_id=user_id
+        order_owner_id=user_id,
+        order_type=Type.LIMIT,
+        price=price
     )
 
     response = await async_client.post(
@@ -78,16 +79,17 @@ async def testing_order_route_with_happy_paths_and_edgecase(
     price = Decimal("10")
     number_of_shares = Decimal("150")
 
-    await seed_cash_factory(owner_id=user_id, available_cash=Decimal(set_cash))    
+    await seed_cash_factory(owner_id=user_id, available_cash=Decimal(set_cash), ticker=ticker)    
     await seed_shares_factory(owner_id=user_id, shares=Decimal(set_shares), ticker=ticker)
     valid_token = token_factory(user_id=user_id, kyc_verified=True)
 
     order = order_factory(
         ticker=ticker,
         side=side,
-        price=price,
         number_of_shares=number_of_shares,
-        order_owner_id=user_id
+        order_owner_id=user_id,
+        order_type=Type.LIMIT,
+        price=price
     )
 
     response = await async_client.post(
@@ -116,7 +118,7 @@ async def test_order_mathematical_boundaries(
 ):
     user_id = str(uuid.uuid4())
 
-    await seed_cash_factory(owner_id=user_id, available_cash=Decimal("10000000000.00"))
+    await seed_cash_factory(owner_id=user_id, available_cash=Decimal("10000000000.00"), ticker="APP")
     valid_token = token_factory(user_id=user_id, kyc_verified=True)
 
     raw_malicious_payload = {
@@ -142,15 +144,16 @@ async def test_matching_engine(
     seed_shares_factory, order_factory, test_redis
 ):
     user_id_1_buyer = str(uuid.uuid4())
-    await seed_cash_factory(owner_id=user_id_1_buyer, available_cash=Decimal("10000"))
+    await seed_cash_factory(owner_id=user_id_1_buyer, available_cash=Decimal("10000"), ticker="APP")
     valid_token_for_user_1 = token_factory(user_id=user_id_1_buyer, kyc_verified=True)
 
     buy_order_by_user_1 = order_factory(
         ticker="APP",
         side=Side.BUY,
-        price=Decimal("10"),
         number_of_shares=Decimal("100"),
-        order_owner_id=user_id_1_buyer
+        order_owner_id=user_id_1_buyer,
+        order_type=Type.LIMIT,
+        price=Decimal("10")
     )
 
     response1 = await async_client.post(
@@ -167,9 +170,10 @@ async def test_matching_engine(
     sell_order_by_user_2 = order_factory(
         ticker="APP",
         side=Side.SELL,
-        price=Decimal("10"),
         number_of_shares=Decimal("100"),
-        order_owner_id=user_id_2_seller
+        order_owner_id=user_id_2_seller,
+        order_type=Type.LIMIT,
+        price=Decimal("10")
     )
 
     response2 = await async_client.post(
@@ -212,21 +216,28 @@ async def test_matching_engine_partial_fill(
     user_seller = str(uuid.uuid4())
     multiplier = Decimal(os.getenv("SYSTEM_PRECISION_MULTIPLIER", 100000000))
     
-    await seed_cash_factory(owner_id=user_buyer, available_cash=Decimal("10000"))
+    await seed_cash_factory(owner_id=user_buyer, available_cash=Decimal("10000"), ticker="AUX")
     await seed_shares_factory(owner_id=user_seller, shares=Decimal("40"), ticker="AUX")
     
     buyer_token = token_factory(user_id=user_buyer, kyc_verified=True)
     seller_token = token_factory(user_id=user_seller, kyc_verified=True)
 
-    sell_order = order_factory(ticker="AUX", side=Side.SELL, price=Decimal("10"), number_of_shares=Decimal("40"), order_owner_id=user_seller)
+    sell_order = order_factory(
+        ticker="AUX", side=Side.SELL, number_of_shares=Decimal("40"), 
+        order_owner_id=user_seller, order_type=Type.LIMIT, price=Decimal("10")
+    )
     await async_client.post("/order", json=sell_order.model_dump(mode="json"), headers={'Authorization': f"Bearer {seller_token}"})
     
-    buy_order = order_factory(ticker="AUX", side=Side.BUY, price=Decimal("10"), number_of_shares=Decimal("100"), order_owner_id=user_buyer)
+    buy_order = order_factory(
+        ticker="AUX", side=Side.BUY, number_of_shares=Decimal("100"), 
+        order_owner_id=user_buyer, order_type=Type.LIMIT, price=Decimal("10")
+    )
     await async_client.post("/order", json=buy_order.model_dump(mode="json"), headers={"Authorization": f"Bearer {buyer_token}"})
 
     getting_stream = await test_redis.xread({"executed_trades_stream": "0-0"})
-    _, message_list = getting_stream[0]
+    assert getting_stream, "No executed trades stream found in Redis"
     
+    _, message_list = getting_stream[0]
     test_trades = [json.loads(p["data"]) for _, p in message_list if json.loads(p["data"])["seller_id"] == user_seller]
     
     assert len(test_trades) > 0, "Engine failed to match the partial fill"
@@ -247,21 +258,30 @@ async def test_matching_engine_price_time_priority(
 
     await seed_shares_factory(owner_id=user_seller_1, shares=Decimal("1000"), ticker=test_ticker)
     await seed_shares_factory(owner_id=user_seller_2, shares=Decimal("1000"), ticker=test_ticker)
-    await seed_cash_factory(owner_id=user_buyer, available_cash=Decimal("10000"))
+    await seed_cash_factory(owner_id=user_buyer, available_cash=Decimal("10000"), ticker=test_ticker)
 
     token_s1 = token_factory(user_id=user_seller_1, kyc_verified=True)
-    token_s2 = token_factory(user_seller_2, True)
-    token_b = token_factory(user_buyer, True)
+    token_s2 = token_factory(user_id=user_seller_2, kyc_verified=True)
+    token_b = token_factory(user_id=user_buyer, kyc_verified=True)
 
-    sell_1 = order_factory(ticker=test_ticker, side=Side.SELL, price=Decimal("10"), number_of_shares=Decimal("10"), order_owner_id=user_seller_1)
+    sell_1 = order_factory(
+        ticker=test_ticker, side=Side.SELL, number_of_shares=Decimal("10"), 
+        order_owner_id=user_seller_1, order_type=Type.LIMIT, price=Decimal("10")
+    )
     res1 = await async_client.post("/order", json=sell_1.model_dump(mode="json"), headers={'Authorization': f"Bearer {token_s1}"})
     assert res1.status_code == 200
 
-    sell_2 = order_factory(ticker=test_ticker, side=Side.SELL, price=Decimal("10"), number_of_shares=Decimal("10"), order_owner_id=user_seller_2)
+    sell_2 = order_factory(
+        ticker=test_ticker, side=Side.SELL, number_of_shares=Decimal("10"), 
+        order_owner_id=user_seller_2, order_type=Type.LIMIT, price=Decimal("10")
+    )
     res2 = await async_client.post("/order", json=sell_2.model_dump(mode="json"), headers={'Authorization': f"Bearer {token_s2}"})
     assert res2.status_code == 200
 
-    buy = order_factory(ticker=test_ticker, side=Side.BUY, price=Decimal("10"), number_of_shares=Decimal("10"), order_owner_id=user_buyer)
+    buy = order_factory(
+        ticker=test_ticker, side=Side.BUY, number_of_shares=Decimal("10"), 
+        order_owner_id=user_buyer, order_type=Type.LIMIT, price=Decimal("10")
+    )
     res3 = await async_client.post("/order", json=buy.model_dump(mode="json"), headers={"Authorization": f"Bearer {token_b}"})
     assert res3.status_code == 200
 
@@ -291,16 +311,22 @@ async def test_matching_engine_price_improvement(
     multiplier = Decimal(os.getenv("SYSTEM_PRECISION_MULTIPLIER", 100000000))
 
     await seed_shares_factory(owner_id=user_seller, shares=Decimal("1000"), ticker=test_ticker)
-    await seed_cash_factory(owner_id=user_buyer, available_cash=Decimal("10000"))
+    await seed_cash_factory(owner_id=user_buyer, available_cash=Decimal("10000"), ticker=test_ticker)
 
     seller_token = token_factory(user_id=user_seller, kyc_verified=True)
     buyer_token = token_factory(user_id=user_buyer, kyc_verified=True)
 
-    sell_order = order_factory(ticker=test_ticker, side=Side.SELL, price=Decimal("10"), number_of_shares=Decimal("10"), order_owner_id=user_seller)
+    sell_order = order_factory(
+        ticker=test_ticker, side=Side.SELL, number_of_shares=Decimal("10"), 
+        order_owner_id=user_seller, order_type=Type.LIMIT, price=Decimal("10")
+    )
     res1 = await async_client.post("/order", json=sell_order.model_dump(mode="json"), headers={'Authorization': f"Bearer {seller_token}"})
     assert res1.status_code == 200
 
-    buy_order = order_factory(ticker=test_ticker, side=Side.BUY, price=Decimal("12"), number_of_shares=Decimal("10"), order_owner_id=user_buyer)
+    buy_order = order_factory(
+        ticker=test_ticker, side=Side.BUY, number_of_shares=Decimal("10"), 
+        order_owner_id=user_buyer, order_type=Type.LIMIT, price=Decimal("12")
+    )
     res2 = await async_client.post("/order", json=buy_order.model_dump(mode="json"), headers={"Authorization": f"Bearer {buyer_token}"})
     assert res2.status_code == 200
 
@@ -330,7 +356,7 @@ async def test_market_order_end_to_end_route(
     Accepts the payload with no price, successfully injects the ceiling via have_funds,
     routes to process_market_orders_ioc, and publishes the correct data to Redis streams.
     """
-    test_ticker = "MARKET_TEST"
+    test_ticker = "AMD"
     multiplier = Decimal(os.getenv("SYSTEM_PRECISION_MULTIPLIER", 100000000))
     
     user_seller = str(uuid.uuid4())
@@ -346,7 +372,7 @@ async def test_market_order_end_to_end_route(
     res_seller = await async_client.post("/order", json=sell_order.model_dump(mode="json"), headers={'Authorization': f"Bearer {seller_token}"})
     assert res_seller.status_code == 200
     
-    await seed_cash_factory(owner_id=user_buyer, available_cash=Decimal("5000"))
+    await seed_cash_factory(owner_id=user_buyer, available_cash=Decimal("5000"), ticker=test_ticker)
     buyer_token = token_factory(user_id=user_buyer, kyc_verified=True)
     
     buy_market_order = order_factory(
