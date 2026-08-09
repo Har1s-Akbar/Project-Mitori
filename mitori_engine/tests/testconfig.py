@@ -106,8 +106,8 @@ async def seed_cash_factory(test_redis):
         
         bbo_key = f'ticker:{ticker}:bbo'
         await test_redis.hset(bbo_key, mapping={
-            'best_bid': "10.00",
-            'best_ask': "10.00"
+            'best_bid_price': "10.00",
+            'best_ask_price': "10.00"
         })
     return _seeding
 
@@ -124,8 +124,8 @@ async def seed_shares_factory(test_redis):
         
         bbo_key = f'ticker:{ticker}:bbo'
         await test_redis.hset(bbo_key, mapping={
-            'best_bid': "10.00",
-            'best_ask': "10.00"
+            'best_bid_price': "10.00",
+            'best_ask_price': "10.00"
         })
     return _seeding
 
