@@ -360,7 +360,7 @@ async def test_market_buy_circuit_breaker_empty_asks(test_redis, test_request):
             pass
 
     assert exec_info.value.status_code == 406
-    assert "Market does not have enough sell side liquidity" in exec_info.value.detail
+    assert "Market does not have enough liquidity" in exec_info.value.detail
 
 @pytest.mark.asyncio
 async def test_market_sell_circuit_breaker_empty_bids(test_redis, test_request):
