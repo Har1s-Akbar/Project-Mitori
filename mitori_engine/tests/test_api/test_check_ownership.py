@@ -1,14 +1,13 @@
 import pytest
 from fastapi import HTTPException
-from schemas.schema import OrderReq
-from core.models import Side, Order
+from schemas.schema import OrderReq, MARKET
+from core.models import Side, Order, Type # ADDED: Type enum
 from core.engine import OrderBook
 from api.security import AuthenticatedUser
 from api.check_ownership import check_owner_ship
 import uuid
 from decimal import Decimal
 from unittest.mock import patch
-from schemas.schema import MARKET
 
 @pytest.mark.asyncio
 async def test_Invalid_uuid():
@@ -47,6 +46,7 @@ async def test_mismatch_orderUUID():
     order = Order(
         ticker='APP',
         side= Side.BUY,
+        type=Type.LIMIT, 
         price=Decimal("15"),
         number_of_shares=Decimal("4"),
         order_owner_id=user.user_id,
@@ -73,6 +73,7 @@ async def test_someone_else_trying_to_delete_order():
     order = Order(
         ticker='APP',
         side= Side.BUY,
+        type=Type.LIMIT, 
         price=Decimal("15"),
         number_of_shares=Decimal("4"),
         order_owner_id=user_id_owner,
@@ -95,6 +96,7 @@ async def test_successful_ownership_check():
     order = Order(
         ticker='APP',
         side=Side.BUY,
+        type=Type.LIMIT, 
         price=Decimal("15"),
         number_of_shares=Decimal("4"),
         order_owner_id=user_id,
