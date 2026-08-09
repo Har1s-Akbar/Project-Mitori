@@ -42,8 +42,8 @@ async def have_funds(request: Request, user: AuthenticatedUser = Depends(is_user
                         if user_data['BBO_ask_price'] is None:
                             raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Market does not have enough liquidity")
                         
-                        total_decimal = (Decimal(user_data['BBO_ask_price']) * order_quantity * Decimal("1.01"))
-                        total = int(total_decimal * multiplier)
+                        total = (Decimal(user_data['BBO_ask_price']) * order_quantity * Decimal("1.01"))
+                        
                         
                     elif order_type == Type.LIMIT:
                         total = int(order_price * order_quantity * multiplier)
@@ -52,8 +52,8 @@ async def have_funds(request: Request, user: AuthenticatedUser = Depends(is_user
                         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not enough funds for the trade")
                     
                     updates = {
-                        'available_cash': int(user_data['safe_available_cash']) - total,
-                        'locked_balance': int(user_data['safe_locked_cash']) + total
+                        'available_cash': int(user_data['safe_available_cash'] - total),
+                        'locked_balance': int(user_data['safe_locked_cash'] + total)
                     }
                     pipeline.multi()
                     pipeline.hset(f'cache:portfolio:{order_user_id}', mapping=updates)
@@ -77,8 +77,8 @@ async def have_funds(request: Request, user: AuthenticatedUser = Depends(is_user
                         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You do not have enough shares")
                     
                     updates = {
-                        order_ticker: int(user_data[order_ticker]) - total_shares,
-                        f'locked_{order_ticker}': int(user_data[f'locked_{order_ticker}']) + total_shares
+                        order_ticker: int(user_data[order_ticker] - total_shares),
+                        f'locked_{order_ticker}': int(user_data[f'locked_{order_ticker}'] + total_shares)
                     }
                     pipeline.multi()
                     pipeline.hset(f'cache:positions:{order_user_id}', mapping=updates)
@@ -98,12 +98,12 @@ async def have_funds(request: Request, user: AuthenticatedUser = Depends(is_user
     except Exception as route_error:
         async with redis_connection_port.pipeline() as rollback_pipeline:
             if locked_shares > 0:
-                rollback_pipeline.hincrby(f'cache:positions:{order_user_id}', order_ticker, locked_shares)
-                rollback_pipeline.hincrby(f'cache:positions:{order_user_id}', f'locked_{order_ticker}', -locked_shares)
+                rollback_pipeline.hincrby(f'cache:positions:{order_user_id}', order_ticker, int(locked_shares))
+                rollback_pipeline.hincrby(f'cache:positions:{order_user_id}', f'locked_{order_ticker}', int(-locked_shares))
             
             if locked_fiat > 0:
-                rollback_pipeline.hincrby(f'cache:portfolio:{order_user_id}', 'available_cash', locked_fiat)
-                rollback_pipeline.hincrby(f'cache:portfolio:{order_user_id}', 'locked_balance', -locked_fiat)
+                rollback_pipeline.hincrby(f'cache:portfolio:{order_user_id}', 'available_cash', int(locked_fiat))
+                rollback_pipeline.hincrby(f'cache:portfolio:{order_user_id}', 'locked_balance', int(-locked_fiat))
                 
             await rollback_pipeline.execute()
             

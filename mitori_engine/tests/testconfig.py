@@ -96,7 +96,7 @@ def token_factory():
 
 @pytest_asyncio.fixture
 async def seed_cash_factory(test_redis):
-    async def _seeding(owner_id: str, available_cash: Decimal, ticker: str = "APP"):
+    async def _seeding(owner_id: str, available_cash: Decimal, ticker: str):
         stream_key = f'cache:portfolio:{owner_id}'
         set_values = {
             'available_cash': int(available_cash * MULTIPLIER),
@@ -106,8 +106,8 @@ async def seed_cash_factory(test_redis):
         
         bbo_key = f'ticker:{ticker}:bbo'
         await test_redis.hset(bbo_key, mapping={
-            'best_bid': "10.00",
-            'best_ask': "10.00"
+            'best_bid_price': int(Decimal(str(10.00))*MULTIPLIER),
+            'best_ask_price': int(Decimal(str(10.00))*MULTIPLIER)
         })
     return _seeding
 
@@ -124,8 +124,8 @@ async def seed_shares_factory(test_redis):
         
         bbo_key = f'ticker:{ticker}:bbo'
         await test_redis.hset(bbo_key, mapping={
-            'best_bid': "10.00",
-            'best_ask': "10.00"
+            'best_bid_price': int(Decimal(str(10.00))*MULTIPLIER),
+            'best_ask_price': int(Decimal(str(10.00))*MULTIPLIER)
         })
     return _seeding
 

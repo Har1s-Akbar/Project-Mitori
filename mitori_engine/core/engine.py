@@ -58,7 +58,7 @@ class OrderBook():
             executed_trades.append(Trade(
                 ticker=self.ticker,
                 quantity=transactioning_shares,
-                price_locked_by_user=None,
+                price_locked_by_user=0,
                 price_setteled_at=settled_price,
                 buyer_id=buyer_id,
                 seller_id=seller_id
@@ -90,7 +90,7 @@ class OrderBook():
             best_ask = self.ask[0][3]
             
             if str(best_bid.order_id) in self.canceled_uuids:
-                heapq.heappop(self.bid)  # Pop bid from bid heap
+                heapq.heappop(self.bid)
                 self.canceled_uuids.remove(str(best_bid.order_id))
                 continue
                 
@@ -115,7 +115,7 @@ class OrderBook():
                 trades_executed.append(Trade(
                     ticker=self.ticker,
                     quantity=transactioning_shares,
-                    price_locked_by_user=best_bid.price,
+                    price_locked_by_user=best_bid.price if best_bid.price else 0,
                     price_setteled_at=settled_price,
                     buyer_id=best_bid.order_owner_id,
                     seller_id=best_ask.order_owner_id
@@ -168,6 +168,6 @@ class OrderBook():
                 self.canceled_uuids.remove(str(top_bid.order_id))
 
         return {
-            "best_ask_price" : best_ask,
-            "best_bid_price" : best_bid 
+            "best_ask_price" : best_ask if best_ask else int(0),
+            "best_bid_price" : best_bid if best_bid else int(0)
         }

@@ -42,7 +42,7 @@ async def test_for_buy_order(test_redis, test_request):
         'available_cash': int(initial_balance),
         'locked_balance': 0
     }
-    
+
     await test_redis.hset(buyer_cache_portfolio_key_redis, mapping=buyer_portfolio_dict)
 
     order = OrderReq(
@@ -282,7 +282,7 @@ async def test_market_buy_locks_buffered_bbo_and_injects_ceiling(test_redis, tes
     portfolio_key = f'cache:portfolio:{user_id}'
     await test_redis.hset(portfolio_key, mapping={'available_cash': int(Decimal("5000") * multiplier), 'locked_balance': 0})
     
-    await test_redis.hset('ticker:APP:bbo', mapping={'best_ask': "100.00", 'best_bid': "99.00"})
+    await test_redis.hset('ticker:APP:bbo', mapping={'best_ask_price': int(Decimal("100.00")*multiplier), 'best_bid_price': int(Decimal("99.00")*multiplier)})
 
     order = OrderReq(
         ticker='APP',
@@ -316,7 +316,7 @@ async def test_market_sell_locks_shares(test_redis, test_request):
     positions_key = f'cache:positions:{user_id}'
     await test_redis.hset(positions_key, mapping={'APP': int(Decimal("50") * multiplier), 'locked_APP': 0})
     
-    await test_redis.hset('ticker:APP:bbo', mapping={'best_bid': "99.00"})
+    await test_redis.hset('ticker:APP:bbo', mapping={'best_bid_price': "99.00"})
 
     order = OrderReq(
         ticker='APP',

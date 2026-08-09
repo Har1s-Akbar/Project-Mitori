@@ -83,14 +83,14 @@ async def place_order(
     target_book = MARKET[order.ticker]
     multiplier = Decimal(os.getenv('SYSTEM_PRECISION_MULTIPLIER', '10000'))
 
-    price_scaled_up = int(order.price * multiplier) if order.price is not None else None
-    shares_scaled_up = int(order.number_of_shares * multiplier)
+    price_scaled_up = int(Decimal(str(order.price)) * multiplier) if order.price else None
+    shares_scaled_up = int(Decimal(str(order.number_of_shares)) * multiplier)
 
     new_order = Order(
         ticker = order.ticker,
         side = order.side,
         type = order.type,
-        price = price_scaled_up,
+        price = price_scaled_up if price_scaled_up else 0,
         number_of_shares = shares_scaled_up,
         order_owner_id = uuid.UUID(current_user.user_id),
         is_canceled=False,
