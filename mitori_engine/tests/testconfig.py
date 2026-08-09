@@ -41,16 +41,16 @@ async def test_redis():
 @pytest.fixture
 def test_request(test_redis):
     class MockState:
-        def __init__(self, redis):
-            self.redis = redis
+        def __init__(self, redis_conn):
+            self.redis = redis_conn
 
     class MockApp:
-        def __init__(self, redis):
-            self.state = MockState(redis)
+        def __init__(self, redis_conn):
+            self.state = MockState(redis_conn)
 
     class MockRequest:
-        def __init__(self, redis):
-            self.app = MockApp(redis)
+        def __init__(self, redis_conn):
+            self.app = MockApp(redis_conn)
 
     return MockRequest(test_redis)
 
@@ -106,8 +106,8 @@ async def seed_cash_factory(test_redis):
         
         bbo_key = f'ticker:{ticker}:bbo'
         await test_redis.hset(bbo_key, mapping={
-            'best_bid_price': "10.00",
-            'best_ask_price': "10.00"
+            'best_bid': "10.00",
+            'best_ask': "10.00"
         })
     return _seeding
 
@@ -124,8 +124,8 @@ async def seed_shares_factory(test_redis):
         
         bbo_key = f'ticker:{ticker}:bbo'
         await test_redis.hset(bbo_key, mapping={
-            'best_bid_price': "10.00",
-            'best_ask_price': "10.00"
+            'best_bid': "10.00",
+            'best_ask': "10.00"
         })
     return _seeding
 

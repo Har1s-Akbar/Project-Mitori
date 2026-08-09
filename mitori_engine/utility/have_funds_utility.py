@@ -1,8 +1,8 @@
 from decimal import Decimal
 
 async def redis_get_buyer_portfolio( ticker:str ,pipeline, portfolio_id:str)-> dict:
-    available_cash = await pipeline.hget(f'cache:portfolio:{portfolio_id}','available_cash')
-    locked_cash = await pipeline.hget(f'cache:portfolio:{portfolio_id}','locked_balance')
+    available_cash = await pipeline.hget(portfolio_id,'available_cash')
+    locked_cash = await pipeline.hget(portfolio_id,'locked_balance')
     safe_available_cash = Decimal(str(available_cash or 0))
     safe_locked_cash = Decimal(str(locked_cash or 0))
     get_sell_price = await pipeline.hget(f'ticker:{ticker}:bbo', 'best_ask_price')
