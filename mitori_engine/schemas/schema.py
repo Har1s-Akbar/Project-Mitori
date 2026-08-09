@@ -21,6 +21,8 @@ class OrderReq(BaseModel):
     order_owner_id :uuid.UUID | None  = None
     price:Optional[Decimal]= Field(max_digits=40, decimal_places=8, gt=0, lt=100000000000000)
 
+    max_authorized_funds: Optional[Decimal] = Field(default=None, exclude=True)
+
     @model_validator(mode="after")
     def type_check(self) -> OrderReq:
         if self.type==Type.LIMIT and self.price is None:
