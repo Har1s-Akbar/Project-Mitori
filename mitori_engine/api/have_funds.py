@@ -36,7 +36,7 @@ async def have_funds(request: Request, user: AuthenticatedUser = Depends(is_user
             try:
                 if order_side == Side.BUY:
                     await pipeline.watch(f'cache:portfolio:{order_user_id}')
-                    user_data = await redis_get_buyer_portfolio(ticker=order_ticker, pipeline=pipeline, user_id=order_user_id)
+                    user_data = await redis_get_buyer_portfolio(ticker=order_ticker, pipeline=pipeline, user_id=f'cache:portfolio:{order_user_id}')
 
                     if order_type == Type.MARKET:
                         if user_data['BBO_ask_price'] is None:
@@ -66,7 +66,7 @@ async def have_funds(request: Request, user: AuthenticatedUser = Depends(is_user
 
                 elif order_side == Side.SELL:
                     await pipeline.watch(f'cache:positions:{order_user_id}')
-                    user_data = await redis_get_seller_positions(ticker=order_ticker, pipeline=pipeline, user_id=order_user_id)
+                    user_data = await redis_get_seller_positions(ticker=order_ticker, pipeline=pipeline, user_id=f'cache:positions:{order_user_id}')
 
                     if order_type == Type.MARKET and user_data['BBO_bid_price'] is None:
                         raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Market does not have enough buy side liquidity")
