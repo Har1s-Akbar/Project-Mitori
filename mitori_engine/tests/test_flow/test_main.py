@@ -340,7 +340,7 @@ async def test_market_order_end_to_end_route(
     seller_token = token_factory(user_id=user_seller, kyc_verified=True)
     
     sell_order = order_factory(
-        ticker=test_ticker, side=Side.SELL, type=Type.LIMIT, 
+        ticker=test_ticker, side=Side.SELL, order_type=Type.LIMIT, 
         price=Decimal("15"), number_of_shares=Decimal("10"), order_owner_id=user_seller
     )
     res_seller = await async_client.post("/order", json=sell_order.model_dump(mode="json"), headers={'Authorization': f"Bearer {seller_token}"})

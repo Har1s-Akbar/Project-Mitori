@@ -16,7 +16,7 @@ async def have_funds(request: Request, user: AuthenticatedUser = Depends(is_user
     if order.ticker not in MARKET:
         raise HTTPException(status_code=404, detail="Ticker does not exist")
 
-    multiplier = Decimal(os.getenv('SYSTEM_PRECISION_MULTIPLIER', '10000'))
+    multiplier = Decimal(os.getenv('SYSTEM_PRECISION_MULTIPLIER', '100000000'))
     redis_connection_port = request.app.state.redis
 
     order_side = order.side
@@ -40,7 +40,7 @@ async def have_funds(request: Request, user: AuthenticatedUser = Depends(is_user
 
                     if order_type == Type.MARKET:
                         if user_data['BBO_ask_price'] is None:
-                            raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Market does not have enough sell side liquidity")
+                            raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Market does not have enough liquidity")
                         
                         total_decimal = (Decimal(user_data['BBO_ask_price']) * order_quantity * Decimal("1.01"))
                         total = int(total_decimal * multiplier)
@@ -69,7 +69,7 @@ async def have_funds(request: Request, user: AuthenticatedUser = Depends(is_user
                     user_data = await redis_get_seller_positions(ticker=order_ticker, pipeline=pipeline, positions_id=f'cache:positions:{order_user_id}')
 
                     if order_type == Type.MARKET and user_data['BBO_bid_price'] is None:
-                        raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Market does not have enough buy side liquidity")
+                        raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Market does not have enough liquidity")
                     
                     total_shares = int(order_quantity * multiplier)
 
