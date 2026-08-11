@@ -7,7 +7,7 @@ services:
       - .env
     environment:
       - POSTGRES_USER=${DATABASE_USER}
-      -  POSTGRES_PASSWORD=${DATABASE_PASSWORD}
+      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
       - POSTGRES_DB=${DATABASE_NAME}
     ports:
       - "5433:5432"
@@ -111,6 +111,22 @@ services:
       - POSTGRES_HOST=${DATABASE_HOST}
       - POSTGRES_PORT=5432
       - REDIS_URL=redis://redis:6379/0
-
+  benchmark_runner:
+    build: ./benchmark
+    profiles: ["testing"]
+    volumes:
+      - ./benchmark:/app/benchmark
+      - ./mitori_engine:/app/mitori_engine
+    environment:
+      - PYTHONPATH=/app
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    cpuset: "0-3"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
 volumes:
   postgres_data:
