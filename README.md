@@ -1,12 +1,34 @@
 ![CI](https://github.com/Har1s-Akbar/Project-Mitori/actions/workflows/ci.yml/badge.svg)
-# Project-Mitori
-A microservice-based stock brokerage platform and order book analytics engine
 
-## What is this?
-Project Mitori is a custom-built stock trading platform I am developing from scratch. The goal is to learn how real financial systems work under the hood. 
+# Project Mitori
 
-## Bird's Eye View of the project
-Mainly i intend to create a custom build stock trading application, with various technologies and architectural approaches , observing trade-offs and critically analyzing the choices of what create a real enterprise application.
+A decoupled, polyglot stock brokerage platform and order-book matching engine, built from scratch to understand how real trading infrastructure works under the hood — and to answer one specific question: **does rewriting the matching core in C++ actually reduce latency once you account for cross-process communication overhead, or does the network cost eat the gain?**
+
+Started July 6, 2026. Actively developed daily since.
+
+## Table of contents
+- [Overview](#overview)
+- [Architecture at a glance](#architecture-at-a-glance)
+- [The research question](#the-research-question--network-vs-execution-paradox)
+- [Tech stack](#tech-stack)
+- [mitori_backend — Django](#mitori_backend--django)
+- [mitori_engine — FastAPI](#mitori_engine--fastapi)
+- [The Redis streaming bridge](#the-redis-streaming-bridge)
+- [Redis cache & the hold pattern](#redis-cache--the-hold-pattern)
+- [JWT authentication](#jwt-authentication)
+- [Observability](#observability)
+- [Testing](#testing)
+- [Dockerization & CI/CD](#dockerization--cicd)
+- [Running it locally](#running-it-locally)
+- [Roadmap](#roadmap)
+
+---
+
+## Overview
+
+Project Mitori is a custom-built stock trading platform. The goal isn't to ship a product — it's to build every layer of a real brokerage system myself: matching engine, ledger, settlement, caching, auth, observability, and eventually a performance comparison between a Python and a C++ matching core. Each architectural decision below was chosen deliberately, with the alternatives I considered and rejected written out, because the reasoning is the actual point of this project.
+
+## Architecture at a glance
 
 ```mermaid
 graph TD
@@ -52,334 +74,248 @@ graph TD
     style Signal fill:#0c4b33,stroke:#000,color:#fff
 ```
 
+Everything on this diagram runs inside Docker with health-checked startup ordering, is covered by unit and integration tests, traced end-to-end with correlation IDs, and verified on every push by CI. Those four pieces are cross-cutting rather than boxes on the flow, so they're covered as their own sections below rather than crammed into the diagram.
+
+## The research question — Network vs Execution Paradox
+
+C++ can match orders on the order of nanoseconds thanks to its speed and closeness to the machine. That much isn't in question. What's actually in question is whether that speedup survives being embedded in a decoupled, polyglot system: does cross-process communication overhead consume more time than a raw Python matching loop saves?
+
+Project Mitori exists to answer that with real numbers, not intuition — baseline Python latency measured first, then a C++ rewrite of the matching core measured the same way, with the comparison written up as a short research report. That work is in progress; the methodology document is scaffolded at [`docs/RESEARCH.md`](docs/RESEARCH.md).
+
 ## Tech stack
-* Django for auth and maintaining the certain data in the database which will be postgresql
-* FastApi for simulating the real order book and matching orders in real time.
-* Nextjs for the frontend and for polished Ui
-__That is the major stack for this application__
-## Architectural Approach
-* Architectural approach for this project Mitori would be maintaing the modularity of the technologies leveraging the best pieces of every framework weighing trade offs and chosing the best optimal solution that mimics an enterprise application.
-__In short a polyglot architecture which is highly decoupled , leveraging the solidity of Django , blazing fastness of FastApi and Rendering techniques of Nextjs__
 
-# Expected Outcome
-* What i am aiming for at the end of this project is that I not only implement and levitate this application to production grade enterprise application but also derive some insights about the thoughts and questions i am having and that question is 
-__Is leveraging c++ in such a decoupled polyglot architecture going to decrease the latency of the matched orders in the fastapi or is it not worth the complexity?__
-## Network vs Execution Paradox
-Though it is clear that c++ can match order book in nanosecond because of it's speed and compatibility with the machine level the main point of observation would be cross-process communication overhead, will it consume more time than the raw python script? 
+- **Django + Django REST Framework** — the system of record. Custom auth, the financial ledger, and the settlement daemon live here, because this is the layer that needs Postgres's transactional guarantees and Django's maturity around data integrity.
+- **FastAPI** — the matching engine. Chosen for raw throughput and native `async` support, since this layer's only job is validating and matching orders as fast as possible.
+- **PostgreSQL** — the durable source of truth for every trade, position, and portfolio balance.
+- **Redis** — two distinct roles, kept architecturally separate: a **Stream** for fire-and-persist delivery of matched trades from FastAPI to Django, and a **cache** for the funds/shares hold pattern that lets FastAPI check solvency without touching Postgres on every order.
+- **Docker + Docker Compose** — full local orchestration with health-checked, dependency-ordered startup.
+- **GitHub Actions** — CI running both test suites against real Postgres and Redis service containers on every push.
+- **structlog + orjson** — structured, correlation-ID-tagged logging across both services.
+- **Next.js** — planned for the frontend; not yet built (see [Roadmap](#roadmap)).
 
-This will surely be answered by the end of Project Mitori
-
-This README serves as my daily development log.
+**In short: a highly decoupled polyglot architecture** — Django's solidity for the ledger, FastAPI's speed for matching, Redis as the connective tissue between them, and (eventually) C++ as the answer to the research question above.
 
 ---
 
-# What I've Built So Far
+## mitori_backend — Django
 
-## mitori_backend (The backend)
-* I am tackling Django head on first, Django will serve as the locker room or the ultimate lock for our data, we will use django mainly for:
-* Custom Authentication
-* Django comes with built ini support for several databases and postgresql is one of them we need that because it will be a dataextensive application and we need to have a framework that is proven the test of time , has strong policies , data integrity policies and out of the gate security for everything an enterprise application is supposed to encounter
+Django is the vault. Its job is data integrity, not speed: custom authentication, the financial ledger, and the daemon that commits matched trades into Postgres with full transactional safety.
 
-### Secure Authentication
-* Ripped out Django's default username system.
-* Built a custom User model (`AbstractBaseUser`) that uses Email and Password as the primary login, matching modern app standards. Only email is being used as of right now.
+### Secure authentication
 
+Django's default username-based auth was ripped out entirely in favor of a custom `AbstractBaseUser` model using email and password — matching how modern applications actually authenticate users.
 
-### The Financial Ledger Architecture
-__core_Ledger__ is the secured vault of our application
-Since django is for the absolute data integrity we can not leave any loophole in our safe that guards the data.
-__models.py__
-    * Portfolio Table has one to one relation with the user table.
-    * Position table has one to many relationship with Portfolio table.
-    * LedgerTransaction table has one to many relation with Portfolio table.
-    
-Django Rest Frame work would be required for serving of data from the backend to the frontend. After the installation of drf we create serializers.py file which will hold the serialization logic for our django microservice.
-__serializers.py__
-* PortfolioSerializer and PositionSerializers are instructions to django rest framework what fields to expose to api.
-* The most interesting part is LedgerSerialization because it forces us to ask the question what if the user sent a post request from the front end mimicking someone else and registered a transaction , if we had followed the basic path of not validating the incoming data we would be exposing ourselves to the hackers they can forge their identity pretending to be someone else and make transactions. 
-When a request hits the api endpoint even before reaching the serialzer django views it , middleware process it reads the HTTP Cookie or JWT Token and attaches verified user to request object we leverage that by running 
-```
-    request = self.context.get('request')
-```
-By looking at this we are not inspecting the api request we are reading the encrypted session that will tell us either if this user is trying to impersonate someone or not.
+> Commits: [`6fb1e0b`](https://github.com/Har1s-Akbar/Project-Mitori/commit/6fb1e0b433bb5dc2928479c8d0e7b432f2769042) → [`bbeb1ce`](https://github.com/Har1s-Akbar/Project-Mitori/commit/bbeb1ce7fe6f7300e67bbab4cc36e405f75c5f44)
 
-__views.py__
-If models are our tables then views is where we make the magic work , map how the requests hitting our servers be served.
-__IDOR(Insecure Direct Object Reference)__ There are high chances of a person trying to impersonate someone sending requests as someone else and reading data that he is not authorized to see , we fix that again by looking at the session id and getting to the root of the request , locking that a person should only see the portfolio , positions and transaction he is supposed to see.
-I used generic views  in accordance with the relationship each of our model have with the user. and then finally the query is run on the database that will give the user only and only it's data.
+### The financial ledger
 
-__urls.py__
-Finally i incorporate these views with the url to make the api endpoints fully functional and responding and top them off by running fresh makemigrations and migrate.
+`core_ledger` is the secured vault inside the vault. Three models, deliberately related:
 
-__One Note : before I wrap this django implementation is there are still several things that are still to be implemeneted , I have just laid the ground work for the project , that will be leveraging several technologies , moving away from cohesive or monolithic structures and dwelling into the decoupled land of architecture, all of the unfinished features will be fully implmented once the flow of the project is somewhat complete__
+- `Portfolio` — one-to-one with `User`
+- `Position` — one-to-many with `Portfolio`
+- `LedgerTransaction` — one-to-many with `Portfolio`
 
-__That flow is Client(Frontend)->Mitori Engine(FastAPI - Validate with Redis Cache ,Lock+match)->Redis Stream->Django Daemon(Custom Manager for trade settelment in database) -> Postgres(the source of ultimate trade history and portfolio) ->Redis Cache__
+**Serializer-level identity protection.** `LedgerSerializer` doesn't trust anything the client claims about identity. Before Django REST Framework ever sees the request body, middleware has already read the JWT and attached a verified user to the request object. Every serializer reads that verified identity via `self.context.get('request')` rather than trusting client-supplied fields — the difference between reading an encrypted session and trusting a form field a client could forge.
 
-### Future Improvements in Django microservice
-* [x] Solving Race condition (solved when implementing cache and Custom Management Command for django daemon | it is solved in multiple commits) [First Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/bfa18f4acf73c49252229f8dee6747a4d1448d5f) - [Last Commmit](https://github.com/Har1s-Akbar/Project-Mitori/commit/ba129131c2ec9f6df374d26bc98f10b9c13dbc6b) 
-* [x] implementing JWT (fixing patch 1.1) [First commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/f69618e2c29c0372cacf15b1b26a53f00b901e01) - [Last commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/c52506520e7ae70505bef895a2c76c26e264fd93)
-* [ ] Implementing Logger
-* [ ] DDOS attack
-* [ ] Testing
-* [ ] Implementing KYC properly
-* [ ] Proper email verification workflow
+**IDOR protection at the view layer.** Every view is scoped through the authenticated user's own relationships (`Portfolio` → `Position`/`LedgerTransaction`), so a query can only ever return data the requesting user is entitled to see — there's no code path where the database is queried by a client-supplied ID without that ID being derived from the authenticated session first.
 
-__when i'll be patching these loopholes i'll refernce this readme in the commit and i'll also be tagging it in what commit this certain improvements where made__
+> Commits: [`6fb1e0b`](https://github.com/Har1s-Akbar/Project-Mitori/commit/6fb1e0b433bb5dc2928479c8d0e7b432f2769042) → [`bbeb1ce`](https://github.com/Har1s-Akbar/Project-Mitori/commit/bbeb1ce7fe6f7300e67bbab4cc36e405f75c5f44)
 
-## mitori_engine (The Engine)
-We need FastApis for out matching engine , Instead of frontend reaching out to backend django everytime we have an order we do not reach out to our backend django and register it.
-Because in a high frequency system like this there can be certain situations
-* Order stays hanging , is not filled.
-* Order is canceled after a certain time.
-* Order is edited and replaced.
-As a System Engineer you have to look at what you want your application to do and how the user is going to use it.
-* An order is an intent it is not certain until it is matched and filled.
-* A trade after the match is certain.
-We do not want any uncertainity in our database , we only want facts and data that is certain , so nothing gets past our django until we know it is not an intent it is a fact.
+### Django daemon — trade settlement
 
-keeping that architecture in mind we design our matching engine.
+Once FastAPI matches an order and pushes it onto a Redis stream, something on the Django side has to pick it up, flatten it out of Redis's wire format, and commit it as fact. That's `trade_registery.py` — a Django custom management command that runs as a long-lived daemon via `XREADGROUP`.
 
-we define the folder structure of the project.
+**Why synchronous, not async, on this side.** FastAPI's Redis connection is async; Django's is deliberately synchronous. If the daemon settled multiple trades from the same portfolio concurrently, one trade's settlement could race against another's on the same portfolio row — exactly the kind of half-applied state a ledger can't tolerate. Settling one trade at a time, with full authority over that trade, removes the race entirely.
 
-    mitori_engine
-        ->core
-            ->__init__.py
-            -> engine.py
-            -> models.py
-        main.py
-        requirements.txt
+**Atomicity and locking.** Every settlement runs inside `transaction.atomic()` with `select_for_update` (pessimistic locking) on the affected rows — either the entire trade lands in Postgres or none of it does, and no other process can touch the same row mid-settlement. Only after the transaction actually commits does an `on_commit` hook fire `XACK` back to Redis, removing the message from the pending list. If the process crashes before that hook runs, the message simply stays in the stream for the daemon to pick up again on restart — nothing is lost.
 
-mitori_engine will be our main directory where we will be implementing our engine.
-core will be the directry that will house engine and models.
-main.py is our file that will have configuered routes for our api.
+> Commits: [`821cfa5`](https://github.com/Har1s-Akbar/Project-Mitori/commit/821cfa5b9f30ebc8b1ae3c6faaa69079531631de) → [`07802b1`](https://github.com/Har1s-Akbar/Project-Mitori/commit/07802b1b65fdfb838fdf80dc66c36cd67ec4b6a9)
 
-### Core
-* As the name suggests core holds the core functionality of our FastApi engine.
-it houses two files
-*models (Memory Optimization)*
-* In models we deal with the problem of memory and speed.
-if we chose normal class with dict overhead in it we will be trading off pure speed and memory with ease of use.
-since it is a systems level question and we have to look at it from that perspective we need to know what our system will be doing , our system will be handling thousands of request in such a case normal , generic class will bloat our memory and will make our
-engine slow __which is the thing we are trying to avoid__ because hypothetically our engine will be dealing with great number of requests.
-To make our engine fast we will strip the python class from it's under the hood dict which will transform python class into collection of only necessary things we want
-* dataclass
-* slot
-python provides these option so that we can remove underhood dict from the class and give us speed and memory saving.
+### Idempotency protection
 
-### engine (Matching core)
-* Engine will be the place where we will create our matching engine.
-we will take advantage of the heap data structure of the python for this purpose, we will be creating priority queue strictly based on metrics that, the priority will be given to the order that is 
-* price
-* date_time
-* order_id
-we want the best price according to our criteria to be on the top of the heap, if we get two orders with equivalent price then we move on to our next priority criteria  which is the time , in our order we have the time explicitly calculated at the time of the order.
-this covers our  priority criteria.
-Now the architecture of the order book we wil have
+`XACK` guarantees the *stream* won't redeliver a message once it's acknowledged — but it doesn't protect against the daemon itself retrying a settlement after a partial failure, or a redelivered message on daemon restart. That's a separate, real failure mode: at-least-once delivery, which needs to become exactly-once *effect*.
 
-    Order Book
-        ->buy side list
-        ->sell side list
-        ->ticker
+The fix is a unique constraint on `stream_order_id` at the database level. If the daemon ever attempts to settle the same trade twice, the second attempt raises `IntegrityError` and is caught and discarded rather than double-crediting or double-debiting a portfolio. This is enforced by the database, not application logic — the one guarantee that can't be bypassed by a bug elsewhere in the call path.
 
-when a user would be requesting to buy or sell a certain stock , ticker will be included in that request and based on that ticker we will chose which order book we want the order to be directed to based on the ticker.
+> Commits: [`426aae4`](https://github.com/Har1s-Akbar/Project-Mitori/commit/426aae4d6475781ce7e799030f45606e71c0b3f6) → [`67f905f`](https://github.com/Har1s-Akbar/Project-Mitori/commit/67f905fe409739dd15105e4d050051da76246f55)
 
-* buy side 
-    buy side will be a max heap with the highest price at the top
-*sell side
-    sell side  will be a min heap with lowest price on the top
+### Fixed-point precision
 
+Money and share quantities are handled as fixed-point integers end-to-end, via a system-wide `SYSTEM_PRECISION_MULTIPLIER`, rather than native floats or even `Decimal` passed around loosely. Floats are unsafe for financial arithmetic by construction — this is not a stylistic choice — and Postgres's `Decimal` type, while safe at rest, still needs a single consistent scaling convention as it moves through matching, hold calculations, and settlement math.
 
-### main
-In the main we implement
-* pydantic model for mainatining data integrity of the data received from the user request.
-* maintaining the record for markets so that no malicious user can create another order book with script injection.
-* route configuration and making sure that engine is running
+The one deliberate exception is the Redis cache layer for funds and shares, which uses `HINCRBYFLOAT` because that's the primitive Redis actually offers for atomic in-place increments. This is scoped and self-healing: the cache is fully rehydrated from Postgres's `Decimal` source of truth on every login, which bounds any float drift to a single session rather than letting it compound indefinitely.
 
-### Future Improvements in engine microservice
-* [x] Tombstone Cancellation - implemented tombstone cancellation [first Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/690eac80205244c9910414d4d5e70e7c776d640e) - [Last Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/641e122c40a5d9e385ae181d9edae02b2ecff13d)
-* [] Partial refill injection into heap
-* [ ] MultiWorker scaling for the offered Market
-* [x] Idempotency Protection - Solved Idempotency in the django daemon which will protect against the settelment of identical/same orders  [First Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/426aae4d6475781ce7e799030f45606e71c0b3f6) - [Last Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/67f905fe409739dd15105e4d050051da76246f55)
-* [ ] Write ahead log
-* [ ] Cryptographic Ownership for the order
+> Commits: [`c45a74d`](https://github.com/Har1s-Akbar/Project-Mitori/commit/c45a74d0d288b07616fce791249e76b86a6693a5) → [`4019e54`](https://github.com/Har1s-Akbar/Project-Mitori/commit/4019e5469328e934e0b7ebe52077aff11a520838)
 
-## Streaming Bridge (Fast Api | Fire and persist)
-Now we introduce Redis not because it is a fancy software that every production grade application uses but because there is a certain need that we have for redis in our decoupled system.
-You might ask what that need might be why did i chose redis stream instead of standard HTTP call between django and fastapi
-**Need for Redis**
-We need the matched order to be delivered to our django system so that our django can handle that data and update database as well as perofrm services as well.
-You might say why redis and why not standard HTTP Request.
-* Standard HTTP request breaks the system and purpose of high frequency , standard HTTP would make fastapi pause and divert from it's pupose which is only matching order and validating the user  before the allowing the user to trade.
-* Every HTTP request needs a response , if  fastAPI talks with django directly , it will require the response of Djnago before severing the request and we need django to take the data and update the database , database operations are time expensive. This will make our HTTP request extremely slow and FastApi will miss orders which is the whole point for us choosing the redis stream.
+---
 
-There is another architectural nuance here I could have gone with redis pub/sub but i chose streams which follows the pattern of fire and persist.
-**Pub/Sub**
-Pub/Sub is an architectural structure where there is one publisher and number of services can subscribe to that publisher , and can implement other services based on the action publisher publishes in a channel , but there is a critical flaw that will make our system choke. ***Pub/Sub is fire and forget , it fires the data or action and it is not concerned with the acknowledgement of the subsctriber*** If for some reason our django service is down , instead of retaining the data in stream that data is lost on djangos end. When django service rebots it will not be able to see the traades it missed causing serious disruption in the system.
+## mitori_engine — FastAPI
 
-That made me chose the streams over pub/sub. Which are Fire and persist , until the group that is listening to the specific stream sends an ***XACK*** redis stream maintains those messages as new for the group.
-
-For the code implementation of redis stream you can check the commits below as well beaware the redis stream is implemented along side jwt bearer token authentication and django custom commands, so you might have to jump around to find what you are really looking for.
-[ First Commit ](https://github.com/Har1s-Akbar/Project-Mitori/commit/ce991985e569dad631f376a8aa7554f381942e8e)
-
-### Implementation
-The way i configuered Redis stream is using a pool of connection. This is also an architectural decision. I chose connection pool over standard connection request of redis is because , In High Frequency systems if fastApi our matching engine stalls for sometime to open  a new connection with fastApi everytime a  new order is matched it would be desasterous because opening a connection and then properly closing it takes too much time. So i configuered the connection pool with the number of ***max_connections=15,*** it will make sure 15 connections are already open and everytime fastapi needs  to push a message into the stream it just grabs a connection connects to it , this saves us considerable of time on our request side.
-Along side it I used the Lifespan to manage the global connection pool so that fastapi starts the connection pool everytime the server starts and also gracefully handles it when it's time to close.
-along side the connection pool and lifespan events i also used depenedency injection so that each request that our ***/order*** route servers has redis.redis instance attached to it.
-
-___Finally the choice of implementing appache kafka was alsso present , but i did not chose that route because , first of all apache kafka is for enterprise applications that are managing millions top hundred-millions data per second plus at this point if i were to implement apache kafka i would be over engineering the project , which is the biggest pifall you want to avoid__
-
-## JWT Implementation
-As i mentioned in the django section before  JWT is something that was for future improvements but when i started building this project I found it the absolutely necessary to implement the jwt auth because of sevaral reasons
-* I need to know if the one who is putting the trade is authorized to do so?
-* What if the person is just trying to corrupt the database? 
-*How will the order be linked if there is not id being passed around from django to fastapi and back to django when it was time for settlement of the data.
-
-These quesstions made me add jwt before proceeding any further and also they influenced other features and security implementations in the project as well.
-
-### Implementation
-Now as always there were two to three choices for me when it comes to auth
-* Handling auth at Fastapi
-* Handling at Django
-* Hadling auth using third party service
-
-I chose Handling auth at django using djangorestframework-simplejwt, I will tell you the reason for it as well , It was because using fastapi would make me do extra things like
-* Storing auth sessions in django (for that per login i would have to request to django saving the session)
-* Django would have to verufy the data against fastapi everytime a user would put a request
-
-I solved it by managing the auth at django which was easier than expected as i was able to get it running with customized options for token.
-
-You can see the implementation for jwt here 
-[First Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/1033b34218c429f67be6f038027ce83e90bf195f) - [Last Commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/c52506520e7ae70505bef895a2c76c26e264fd93)
-
-when a user logs in simplejwt produces two token one is the access token and one is refresh token.
-Access token is the one with which you can login and it gives you the authority to interact with the endpoint and refresh token is used to refresh the login it is something that the user does not have to worry about. It is done by simplejwt.
-
-Now access token has user data, you can customize it to send anytype of data , i used it to extract the user id and kyc also one thing to note how can we verify at fastapi if that user is authenticated without requesting or talking to django and database ?
-By using secret key , we use the same secret key we used at django to encrypt the data we decrypt the data at fastapi. That way we save ourselves a trip to database and reading and verifying from records.
-
-I used the same architecture i used in redis  stream implementation , i created a ***security.py*** file with authenticated user data model and ***is_Authenticated_user**, and there i check decrypt the request and check for credentials and based on the state of the request either the request is entertained or rejected.
-
-## Django daemon (Custom Mnagement )
-Now after implementing the executed streams and implementing jwt we made sure that,
-No unauthenticated user can put a trade and the matched trades are always pushed into redis stream we need django to pick up those trades and commit them into our database.
-How can we do that, first of all we need to establish what we want to do.
-* We want to take the new data in streams
-* Redis store the data in a long string so we need to flatten it into a dictionary.
-* we need the django daemon to run infinately, lookinng for the streams and commiting them in database.
-* we need to implment security rules such that no data is corrupted.
-
-for this i chose django custom commands. Django custom commands are very powerful because first of all when you run 
-```
-python manage.py runserver
-python manage.py createsuperuser
-python manage.py makemigrations
-python manage.py migrate
-```
-They are all django commands , I intend to develop a command when called  will spawn an infinite daemon that will keep on running and it's  only job will be taking the trades from streams and managing the database on basis of those trades and also updating cache, I will cover this later in the topic of cache how we will implement it.
-___Django Custom Commands are very powerful they have full access to the whole django ecosystem , django database configuration , database infrastructure , files, built in commmands evrything__
-
-the practice for building a custom command is you create a folder structure like this
-```
-management/
-        ->commands/
-                ->mycommand.py
-                ->__init__.py
-        ->__init__.py
-```
-### Architectural Decisions
-Now here is another architectural decision i had to make it was related to the redis stream i had configuered earlier on the fastAPI engine , I had to chose if the connection the redis on my django would be asynchronous or synchronous. I chose it to be synchronous in my __django daemon__ and on fastApi i had already made it asynchronous.
-The reason for it being synchronous in django daemon is because , django daemon configuration will be strcitly all about 
-* Security
-* Atomicity
-* Solving Race conditions
-* Maintaing the integrity of trades in database
-Based on that reason we do not want asynchronous connection to redis. Django will settle one trade at a time with complete authority and security applied to the trade.
-Suppose if we configuered django to settle all trades at once not one by one, it will introduce many flaws in architecture as well as database.
-If a user has put multiple trades and they are matched available in redis stream and our django daemon is trying to settle all trades at once , it will introduce race condition where one portfolio of  the user will be changing in the middle of the settlement of another trade which we do not want.
-That is why synchronous redis was implemented.
-
-After configuration of redis in our django daemon I move toward reading the stream aand settling the trade in our postgreSQL, After flattening the redis stream and properly turning it into ***python dict*** the data is to be settled in the database.
-Now for it i could have gone with normal manipulation of database but since it is a hih frequency system that needs ultimate security across all fronts , I chose to implement those changes in postgres using __transactions.atomic()__ atomicity is really important in database , we  do not want half data of our trade in our datbase and half being flushed out because of something , so that is why I used __atomic__ this way either all the channges are made in database and the __XACK__ is sent to redis which signals redis to remove the message from the pending list or no change is made in case of server crash and the stream remains in tact for django daemon to settle later.
-With Atomicity locking is important and necessary as well because we do not want any race condition , The type of locking I chose here is __pessimistic locking using select_for_update__ pessimistic locking is a fancy way of saying under no condition the record i am performing action on is available for anyone else.
-That is how i solved the race condition and the problem of half commits to database.
-at the end after daemon has made every possible change in the databse i used __on_commit__ which is a hook that runs only after the transaction has been succesfully committed to the database. It sends __XACK__ to redis signaling it to remove message from the stream.
-__There are other on_commit as well which i'll get into the section of cache__
-
-Django daemon was built in several commits from [First commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/821cfa5b9f30ebc8b1ae3c6faaa69079531631de) - [Last commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/07802b1b65fdfb838fdf80dc66c36cd67ec4b6a9)
-
-## Cache for Mitori Engine
-After getting through with django daemon , I still had to tackle the single most important piece in my decoupled project which was
-__decoupling a high speed Ram Cache based matching engine from permanent disk storage while gauranteeing absolute consistency between the two at the same time__
-If you read the above line you might be confused what i am talking about so lemme walk you through the problem what my system had, Everything is  working fine 
-user logs in gets a token and when he wants to trade the token is passed across every request as well as asynchronous redis pool connection so that when trade matches it is pushed into the redis stream , and when it is pushed into redis stream the django daemon picks it up and settle it in database , but million dollar question here is __how would fastapi know if a user who is trying to put a trade has the funds to trade or not?__
-
-### Architectural Decisions
-So for that purpose we need to find a way to determine at the time of login if a user has enough funds , enough shares to trade and with every trade we also need to find a way to recalculate and refresh the funds and shares so that a user does not manipulate oor trick the system into trdaing the shares he does not have.
-
-I hope you get the picture for that we again turn to our trusted friend and fast memory based database Redis but with a different approach now.
-previously I configuered redis as a fire and persist stream now i will configuere the same redis to behave as a cache to store the portfolio and positions hash (which will in turn have the funds and share the user has at the time of login)
-
-So the flow of how i solved this is
-* Configuering django service for calculation of funds
-* configuering fastApi as the Authority who will check if a user has funds
-
-### Configuring Django 
-I configuered django in such a way that when ever a user logs in his/her account , a function is called that is present in the services.py folder in core_ledger that gets the user portfolio funds and user positions/trades and push then into redis cache using hset.
-This is how django is configuered to deliver absolute truth to the redis cache which will be later read by fastapi to determine if a user has funds for trades
-In setting the cache, I add one more field along with the actual fields
-for funds i add
-* available funds
-* locked balance
-for shares i add
-* ticker
-*locked_ticker
-
-locked fields arre zero at the time of log in but when a user puts a trade funds or shares equivalent are added to the locked field and redis keeps a watch over them , implementing a optimistic lock on them so that they are accessible but can not be changed unless the trade is settleled by the django and funds arre releazed from the locked section
-
-### configuring FastApi
-Now there were certain patterns i could have chose from to set up fastapi to determin the funds of user.
-* added a section in my security.py which is the file that has the code for checking the credentials of user
-* added a new file funds.py in api/ folder and used it to craft a function that will be injected in every request and it will use depends , no request can be processed without it.
-
-I chose the second option and i will tell you why because if i had gone with the first option i will be  binding my hands into using this is_user_authenticated function just for the /order route , it would have created a monolithic pattern breaking what i am trying to build , the effect of this would have been , if i wanted to use this function for the user to see his profile , it would have checked the balance then as well and if the balance was zero it would not have allowed the user to see his profile as well.
-That is why i went with dependency injection architecture with depends , it ensures the state of my engine remains decoupled and this function is called only in places where i want to check the funds.
-
-Now lets get into the architectural decisions that went into creating the function, In the have_funds.py i created a function have_funds this function takes three parameters and is dependent on them
-* Request 
-* is_user_authenticated
-* order object
-__Request__ from request we will get the async redis pool that we can just grab a connection from and perform our cache actions
-__is_user_authenticated__ we tell fastApii , in order to process this request you have to first go and run that function and get me the object that function retuens
-__order object__ we need this order object because we need to get the side if the user is buying or selling based  on that we will decide if we want to check the __funds/money__ or we want to check the __shares__
-after that we grab the order object and we extract the things we want such as order side , order owner id , order ticker and etc.
-we specifiy the redis instance from the request object we are getting.
-and then we try to do conditional check if it is a sell side order or a buy side order.
-* if it is a sell side we check for the certain ticker symbol and shares in redis cache , if shares are > order shares then user is allowed to trade
-* if it is buy side we check the portfolio of user for the funds if the user has enough funds for buying the shares
-* we also add two price fields, price that was locked by user and price that order was settled at.
-__because when you are buying or selling only often your order is filled at the price you want__
-
-#### Optimistic lock
-Here when we determin if the user haas enough funds and is allowed to trade we open a pipeline and we implemet a watch on the certain cache we want to implement changes on , 
-for buyer we implemennt watch on portfolio and for seller we implement watch on positions.
+FastAPI exists because a high-frequency system can't afford to have every incoming order round-trip through Django and Postgres before it's even matched. An order is *intent* — it isn't certain until it's matched. A trade, after matching, *is* certain. Nothing should reach Django until it's a fact, not an intent, which is the design principle behind keeping the matching engine entirely separate from the ledger.
 
 ```
-pipeline.watch() ///implements watch over the key, locks it
-
-pipeline.multi() /// puts the pipeline into transaction mode , instead of implementing those changes at once they are buffered inside the memory for implementating once , allows for atomicity
-
-pipeline.execute() /// execute commmands at once which are buffered in the memory
+mitori_engine
+    core/
+        engine.py
+        models.py
+    main.py
 ```
 
-without watch multi and execute are flawed and bound to change if another request arrives , watch solves this problem.
-After that we implement the changes into the redis cache and now since we have settled the cache at the engine level we need to settle it in django daemon and update it as well.
+### Memory model
 
-#### django daemon
-Now we move once again to django daemon and in the __transaction.on_commit__ we call another service function we created which is __settle_cache__ this function settles the portfolio and postions , if a user is trading the shares for one time we create the cache there and then adding to the cache which is available to fastapi at the same time.
-It frees the locked funds and locked shares on settlement and update the cache positions and portfolio at the same time.
+Python's default class carries a `__dict__` for every instance, which is flexibility you pay for in memory and speed on every allocation. Since the engine needs to hold and mutate potentially thousands of live orders, `Order` is a `@dataclass` with `__slots__` — stripping the per-instance dict down to only the fields actually needed.
 
-This is how I tackled this problem of maintaing the data integrity across postgres , django aand fastapi at the same time.
-__Redis cache math uses float due to HINCRBYFLOAT's constraints, but this is self-healing — the cache is fully rehydrated from Postgres's Decimal source of truth on every login, bounding any drift to the current session.__
+> Commits: [`6312faf`](https://github.com/Har1s-Akbar/Project-Mitori/commit/6312fafb67c1f17e5e90d4f024c710d69357259e) → [`ea38572`](https://github.com/Har1s-Akbar/Project-Mitori/commit/ea385729425d23f0aa62fb111542a7e47bcbe07a)
 
-For cache implementation code you can see
-[First commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/426c34fd46b955c5274a0d2508ab27885d05e611) - [Last commit](https://github.com/Har1s-Akbar/Project-Mitori/commit/bc9cb500069ae54b259732fe9aa4abe723fe921f)
+### Matching engine core
+
+Each ticker gets its own order book: a max-heap on the buy side (highest price first) and a min-heap on the sell side (lowest price first), with price-time priority as the tiebreak — same price resolves by whichever order arrived first. Matching walks both heaps together, executing while the best bid is at or above the best ask, and stops the instant that's no longer true, since the heap invariant guarantees nothing better is waiting further down.
+
+> Commits: [`6312faf`](https://github.com/Har1s-Akbar/Project-Mitori/commit/6312fafb67c1f17e5e90d4f024c710d69357259e) → [`ea38572`](https://github.com/Har1s-Akbar/Project-Mitori/commit/ea385729425d23f0aa62fb111542a7e47bcbe07a)
+
+### Tombstone cancellation & ownership protection
+
+Removing an order from the middle of a heap is expensive — heaps only give you cheap access to the *top*. Cancellation is instead handled by marking the order `is_canceled` in place (a tombstone) and letting the matching loop skip past dead entries lazily as it walks the heap, rather than paying for a mid-structure removal on every cancel.
+
+The first version of this checked order ownership *after* the tombstone lookup — which meant the code path that decided whether the request was even allowed to touch that order ran after the order had already been located, an IDOR risk if that ordering were ever relied on incorrectly downstream. It was fixed by moving the ownership check ahead of any tombstone mutation, so a cancellation request is authorized before it can affect engine state at all, not after.
+
+> Tombstone cancellation: [`690eac8`](https://github.com/Har1s-Akbar/Project-Mitori/commit/690eac80205244c9910414d4d5e70e7c776d640e) → [`641e122`](https://github.com/Har1s-Akbar/Project-Mitori/commit/641e122c40a5d9e385ae181d9edae02b2ecff13d)
+> Ownership-check-before-tombstone fix: [`afedc40`](https://github.com/Har1s-Akbar/Project-Mitori/commit/afedc405e4dd0c13faaf9270fe9735c5d211afd8) → [`dcc7f40`](https://github.com/Har1s-Akbar/Project-Mitori/commit/dcc7f40d8d4a9f6ec18ab3800325dc4fc6013e64)
+
+### Compensating rollback via a `yield` dependency
+
+The order route reserves funds or shares in the Redis cache before attempting a match. If anything downstream of that reservation fails — the match itself, the stream push, an unexpected exception — the hold has to be released, or the user's balance stays locked against an order that never actually happened.
+
+There's no distributed transaction coordinator across FastAPI and Redis, so this is handled with FastAPI's generator-based dependency injection: `have_funds` is a `yield`-based dependency that places the hold, yields control to the route handler, and on the way back out — including via an exception — reverses the reservation if the request didn't complete cleanly. It's a compensating-transaction pattern, not a true rollback, because there's no underlying transaction to roll back; the generator boundary is what makes "undo the hold" a reliable, always-runs step rather than something that has to be remembered at every call site that might fail.
+
+> Commit: [`325cdf7`](https://github.com/Har1s-Akbar/Project-Mitori/commit/325cdf7611fd013333952db8ad305a2ba741ceeb)
+
+### Still open in this service
+
+- [ ] Partial refill injection into the heap
+- [ ] Multi-worker scaling per market
+- [ ] Write-ahead log
+- [ ] Cryptographic ownership for orders
+
+---
+
+## The Redis streaming bridge
+
+FastAPI can't afford a synchronous HTTP round-trip to Django every time an order matches — a database write is comparatively slow, and blocking the matching loop on it defeats the entire point of separating the two services.
+
+**Why not standard HTTP.** Every HTTP request needs a response. If FastAPI called Django directly, it would have to wait on Django's database write before it could move on to the next order — exactly the bottleneck the decoupled architecture exists to avoid.
+
+**Why a stream, not pub/sub.** Redis pub/sub is fire-and-forget: if the subscriber (Django) is down when a message is published, that message is gone. For a system where a "message" is a matched trade, silently losing it on a Django restart is not acceptable. Redis Streams are fire-and-*persist* — a message stays in the stream, visible to its consumer group, until that group explicitly `XACK`s it.
+
+**Why not Kafka.** Kafka is built for the millions-to-hundreds-of-millions-of-messages-per-second tier. Reaching for it here, at this scale, would be over-engineering — solving a scale problem the system doesn't have yet at the cost of real operational complexity.
+
+**Connection pooling.** Opening and closing a fresh Redis connection per matched order is wasted latency in a system that's supposed to be fast. FastAPI instead manages a pool (`max_connections=15`) via its lifespan handler, started once at process boot and injected into each `/order` request as a dependency — so pushing a trade onto the stream is just grabbing an already-open connection, not negotiating a new one.
+
+> Commits: [`ce99198`](https://github.com/Har1s-Akbar/Project-Mitori/commit/ce991985e569dad631f376a8aa7554f381942e8e) → [`1033b34`](https://github.com/Har1s-Akbar/Project-Mitori/commit/1033b34218c429f67be6f038027ce83e90bf195f)
+
+## Redis cache & the hold pattern
+
+There's a question the streaming architecture doesn't answer on its own: when an order hits FastAPI, how does FastAPI — which deliberately never talks to Postgres directly — know whether the user placing it actually has the funds or shares to back it?
+
+**The flow:** on login, a Django service function pushes the user's portfolio and positions into a Redis hash via `HSET`, adding two fields that don't exist in Postgres — `locked_balance` and `locked_ticker` — both zero at login. When a user places an order, the equivalent funds or shares move into the locked field for the duration of that order, and Redis's `WATCH` guards that key against concurrent modification while it's locked.
+
+**Why dependency injection over a monolithic check.** The alternative was a single "is this user allowed to act" check bolted onto `security.py` and reused everywhere, including routes that have nothing to do with trading — which would mean checking a user's *balance* just to let them view their own *profile*. Instead, `have_funds.py` in `api/` is a standalone `Depends`-injected function, wired in only on the routes that actually need a solvency check, keeping the rest of the engine decoupled from it.
+
+**The optimistic lock itself:**
+```
+pipeline.watch()    # locks the key for the duration of this check
+pipeline.multi()    # buffers subsequent commands instead of running them immediately
+pipeline.execute()  # runs the buffered commands atomically
+```
+Without `watch`, `multi`/`execute` alone would be vulnerable to another request modifying the same key between the check and the write. `watch` closes that gap — if the key changes underneath the pipeline, the transaction aborts and is retried rather than silently applying against stale data.
+
+**Reconciliation.** After Django settles a trade, the same `on_commit` hook that sends `XACK` also calls `settle_cache()`, which releases the locked funds/shares and refreshes the cached portfolio and positions — keeping Postgres, Django, and the FastAPI-facing cache consistent without FastAPI ever needing to query Postgres directly.
+
+> Commits: [`426c34f`](https://github.com/Har1s-Akbar/Project-Mitori/commit/426c34fd46b955c5274a0d2508ab27885d05e611) → [`bc9cb50`](https://github.com/Har1s-Akbar/Project-Mitori/commit/bc9cb500069ae54b259732fe9aa4abe723fe921f)
+
+## JWT authentication
+
+Originally scoped as a later improvement, but pulled forward almost immediately — there was no way to know *who* was placing a trade, prevent database corruption from unauthenticated writes, or link an order back to its owner across the FastAPI-to-Django boundary without it.
+
+**Where auth lives.** Handled at Django, via `djangorestframework-simplejwt`, rather than at FastAPI or through a third-party service. Handling it at FastAPI instead would have meant storing sessions there and having Django re-verify against FastAPI on every request — extra round-trips for no real benefit, since Django already owns the user model.
+
+**How FastAPI verifies without a database round-trip.** Both services share the same secret key. Django issues an access token carrying the user ID and KYC status; FastAPI decodes and verifies it locally with the shared secret, which means checking a token's validity never requires FastAPI to ask Django (or the database) anything. This is a deliberate trade-off: it's fast and simple with two trusted internal services, at the cost of any service holding the secret being able to *forge* a token, not just verify one — worth revisiting with asymmetric (RS256) signing if a third service ever needs to verify tokens it doesn't issue.
+
+> Commits: [`1033b34`](https://github.com/Har1s-Akbar/Project-Mitori/commit/1033b34218c429f67be6f038027ce83e90bf195f) → [`c525065`](https://github.com/Har1s-Akbar/Project-Mitori/commit/c52506520e7ae70505bef895a2c76c26e264fd93)
+
+---
+
+## Observability
+
+A decoupled system is much harder to debug than a monolith by construction — a single order's journey now spans two languages, three processes, and a message queue, and "add a print statement" stops being a viable debugging strategy once you can't just attach a debugger to the whole request in one place.
+
+Both services log through `structlog` (with `orjson` for fast structured serialization) instead of default logging, and — the piece that actually matters here — a `correlation_id` is generated when an order enters FastAPI and threaded through every subsequent hop: into the Redis stream message, picked up by the Django daemon, and bound to every log line the daemon emits while processing that trade. One order, one ID, greppable end-to-end across two services and a message broker. Uvicorn's default access logging was turned off entirely in favor of this, since unstructured access logs add noise without adding traceability.
+
+> Commits: [`f4e5c62`](https://github.com/Har1s-Akbar/Project-Mitori/commit/f4e5c625276b6b367113c2d90a036aff8a12d8d3) → [`b524336`](https://github.com/Har1s-Akbar/Project-Mitori/commit/b524336dd0e2638363beee78825cc61c8b44b318)
+
+## Testing
+
+Both services are covered by unit and integration tests — roughly 65 test functions across the two codebases, close to a 1:1 ratio of test code to implementation code. Coverage isn't just happy-path: it includes concurrency and race-condition tests around the Redis hold pattern, idempotency tests that deliberately redeliver the same stream message twice, rollback tests for the `yield`-based compensating transaction, cold-start tests for a user with no cached portfolio yet, and IDOR/ownership edge cases for cancellation.
+
+> Engine test suite: [`6dd83d5`](https://github.com/Har1s-Akbar/Project-Mitori/commit/6dd83d56f1aa4ff3a94e22e2fbbcfef7b2553a88) → [`bf12b49`](https://github.com/Har1s-Akbar/Project-Mitori/commit/bf12b4900ad3845aedce95596672795d8072f7ee)
+> Full test hardening pass: → [`8ddff6e`](https://github.com/Har1s-Akbar/Project-Mitori/commit/8ddff6e67b4e0eb232a3be82f7bb0675fb328ad1)
+
+## Dockerization & CI/CD
+
+**Docker Compose** orchestrates six services — `postgres`, `redis`, `mitori_engine`, `mitori_backend`, and two standalone daemon containers (`trade_daemon`, `cancellation_daemon`) — with health checks gating startup order, so the Django daemons can't start pulling from a stream before Postgres and Redis are actually ready, not just running.
+
+> Commits: [`c525863`](https://github.com/Har1s-Akbar/Project-Mitori/commit/c52586388416c8a2b4a38684c6e713d988cc34a9) → [`c5852cd`](https://github.com/Har1s-Akbar/Project-Mitori/commit/c5852cd86a7e4f95cd8b0b0fcaa85fd0458732fc)
+
+**GitHub Actions** runs both test suites on every push against real Postgres and Redis service containers — not mocks — so CI is exercising the same concurrency and locking behavior the tests are designed to catch, not a simplified stand-in for it.
+
+> Commits: [`ceaf7e8`](https://github.com/Har1s-Akbar/Project-Mitori/commit/ceaf7e81d6d059c56d530bc642d75438f5434d90) → [`901ac63`](https://github.com/Har1s-Akbar/Project-Mitori/commit/901ac636fe33fabb185d29d9601fc060b967d076)
+
+## Running it locally
+
+```bash
+git clone https://github.com/Har1s-Akbar/Project-Mitori.git
+cd Project-Mitori
+cp .env.example .env               # repeat for mitori_backend/ and mitori_engine/
+cp mitori_backend/.env.example mitori_backend/.env
+cp mitori_engine/.env.example mitori_engine/.env
+# fill in JWT_SECRET_KEY, ALGORITHM, and the Postgres credentials — the same
+# JWT_SECRET_KEY and ALGORITHM must match across mitori_backend and mitori_engine
+docker compose up --build
+```
+
+> `.env.example` scaffolding: [`ebf74cb`](https://github.com/Har1s-Akbar/Project-Mitori/commit/ebf74cbb8b71f7dcacff984037e95e554eb6c3a1)
+
+---
+
+## Roadmap
+
+**Done**
+- [x] Race condition handling across cache, stream, and settlement
+- [x] JWT authentication (Django-issued, FastAPI-verified)
+- [x] Tombstone cancellation + ownership-checked-before-mutation fix
+- [x] Idempotency protection (unique-constraint guard against redelivery)
+- [x] System-wide fixed-point precision
+- [x] Compensating rollback for the funds hold (`yield` dependency)
+- [x] Structured, correlation-ID-traced logging (structlog)
+- [x] Unit + integration + concurrency test suites
+- [x] Full Docker Compose orchestration with health-checked startup
+- [x] CI pipeline against real Postgres/Redis service containers
+
+**In progress**
+- [ ] Benchmark harness + Python baseline latency measurement
+- [ ] C++ matching engine rewrite
+- [ ] Research write-up answering the Network vs Execution Paradox question ([`docs/RESEARCH.md`](docs/RESEARCH.md))
+
+**Not started**
+- [ ] Rate limiting / DDoS protection
+- [ ] Full KYC verification workflow (a `kyc_verified` flag is already enforced at the auth layer — trading is blocked until it's `true` — but the actual verification flow behind that flag doesn't exist yet)
+- [ ] Email verification workflow
+- [ ] Write-ahead log
+- [ ] Cryptographic order ownership
+- [ ] Partial refill injection into the heap
+- [ ] Multi-worker scaling per market
+- [ ] Next.js frontend
+
+---
+
+This README is a running log, not a finished spec — sections get added and revised as the corresponding code lands, and every major section links back to the commits it came from.
