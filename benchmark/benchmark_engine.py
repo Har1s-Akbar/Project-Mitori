@@ -61,7 +61,8 @@ def execute_trial(engine: OrderBook, active_stream: list, trial_num: int) -> np.
     num_timing_orders = len(timing_orders)
     
     latencies_ns = np.zeros(num_timing_orders, dtype=np.int64)
-    
+    start_depth = len(engine.bid) + len(engine.ask)
+
     gc.disable()
     
     for i in range(num_timing_orders):
@@ -74,10 +75,13 @@ def execute_trial(engine: OrderBook, active_stream: list, trial_num: int) -> np.
         latencies_ns[i] = end - start
         
     gc.enable()
+
+    end_depth = len(engine.bid) + len(engine.ask)
+    print(f"    [Drift Check] Start Depth: {start_depth:,} | End Depth: {end_depth:,} | Drift: +{end_depth - start_depth:,}")
     
     return latencies_ns
 
-def run_benchmark_for_tier(tier_name: str, seed_file_path: str, active_stream: list, csv_filename:str):
+def run_benchmark_for_tier(tier_name: str, seed_file_path: str, raw_active_stream: list, csv_filename:str):
     print(f"\n--- Starting Micro-Benchmark for {tier_name} Depth ({N_TRIALS} Trials) ---")
     
     trial_p50s = []
@@ -85,7 +89,7 @@ def run_benchmark_for_tier(tier_name: str, seed_file_path: str, active_stream: l
     trial_rps = []
     
     resting_orders = load_json(seed_file_path)
-    num_timing_orders = len(active_stream) - 5000
+    num_timing_orders = len(raw_active_stream) - 5000
     
     for trial in range(1, N_TRIALS + 1):
 
@@ -94,6 +98,8 @@ def run_benchmark_for_tier(tier_name: str, seed_file_path: str, active_stream: l
         for order in resting_orders:
             order_object = unbox_order(order)
             engine.process_order(order_object)
+
+        active_stream = [unbox_order(order) for order in raw_active_stream]
         
         latencies_ns = execute_trial(engine, active_stream, trial)
         
@@ -112,7 +118,7 @@ def run_benchmark_for_tier(tier_name: str, seed_file_path: str, active_stream: l
         
         raw_csv_filename = csv_filename.replace(".csv", "_RAW.csv")
         log_raw_latencies_to_csv(raw_csv_filename, tier_name, trial, latencies_ns)
-        
+
         del engine
         del latencies_ns
         gc.collect()
@@ -130,7 +136,7 @@ def main():
     print("Loading 200,000 active stream orders into memory...")
     raw_active_stream = load_json("benchmark/data/active_stream.json")
 
-    active_stream = [unbox_order(order) for order in raw_active_stream]
+    # active_stream = [unbox_order(order) for order in raw_active_stream]
 
     timestamp = int(time.time())
     csv_filename = f"benchmark/data/python_baseline_{timestamp}.csv"
@@ -142,7 +148,7 @@ def main():
     ]
     
     for tier_name, filepath in tiers:
-        run_benchmark_for_tier(tier_name, filepath, active_stream, csv_filename)
+        run_benchmark_for_tier(tier_name, filepath, raw_active_stream, csv_filename)
         
 if __name__ == "__main__":
     main()
