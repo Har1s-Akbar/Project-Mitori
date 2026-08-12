@@ -1,11 +1,6 @@
 import heapq
 from .models import Order, Trade, Side, Type
-import uuid
 from decimal import Decimal
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
 
 class OrderBook():
     ticker: str
@@ -18,11 +13,11 @@ class OrderBook():
         self.canceled_uuids = set()
 
     def process_order(self, order: Order) -> list[Trade]:
-        if order.type == Type.LIMIT: 
+        if order.type == Type.LIMIT.value: 
             self.add_order(order)
             return self.execute()
             
-        if order.type == Type.MARKET or getattr(order.type, "value", order.type) == Type.MARKET:
+        if order.type == Type.MARKET.value or getattr(order.type, "value", order.type) == Type.MARKET.value:
             return self.process_market_orders_ioc(order)
 
     def process_market_orders_ioc(self, order: Order) -> list[Trade]:

@@ -37,3 +37,4 @@ build/
 Thumbs.db
 
 benchmark/data/*.json
+benchmark/data/*_RAW.csv
