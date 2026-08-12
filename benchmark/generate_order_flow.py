@@ -31,12 +31,12 @@ def ornstein_Uhlenbeck_price(num_of_orders: int) ->np.ndarray:
     return prices
 
 def format_as_decimal_string(value:float)->str:
-    dec_as_str = Decimal(str(value)).quantize(Decimal('0.00000001', rounding=ROUND_HALF_UP))
+    dec_as_str = Decimal(str(value)).quantize(Decimal('0.00000001'),rounding=ROUND_HALF_UP)
     return str(dec_as_str)
 
 def generate_resting_book():
     prices = ornstein_Uhlenbeck_price(50000)
-    sides = np.random.choice([Side.SELL,  Side.BUY],size=50000)
+    sides = np.random.choice([Side.SELL.value,  Side.BUY.value],size=50000)
     quantities = np.random.randint(1,101,size=50000)
     user_uuids = np.array([uuid.uuid4() for _ in range(50000)], dtype=object)
     master_resting = []
@@ -45,7 +45,7 @@ def generate_resting_book():
     for i in range(50000):
         master_resting.append({
             'ticker':'APP',
-            'type': Type.LIMIT,
+            'type': Type.LIMIT.value,
             'side':sides[i],
             'price': format_as_decimal_string(prices[i]),
             'number_of_shares':str(quantities[i]),
@@ -54,19 +54,19 @@ def generate_resting_book():
         })
 
     print("Slicing and saving tier files...")
-    with open("benchmark/data/seed_1k.json", "w") as f:
-        f.write(orjson.dump(master_resting[:1000], f))
-    with open("benchmark/data/seed_25k.json", "w") as f:
-        f.write(orjson.dump(master_resting[:25_000], f))
-    with open("benchmark/data/seed_50k.json", "w") as f:
-        f.write(orjson.dump(master_resting, f))
+    with open("benchmark/data/seed_1k.json", "wb") as f:
+        f.write(orjson.dumps(master_resting[:1000]))
+    with open("benchmark/data/seed_25k.json", "wb") as f:
+        f.write(orjson.dumps(master_resting[:25_000]))
+    with open("benchmark/data/seed_50k.json", "wb") as f:
+        f.write(orjson.dumps(master_resting))
 
 def generate_active_stream():
     prices = ornstein_Uhlenbeck_price(200000)
 
-    types = np.random.choice([Type.MARKET, Type.LIMIT], size=200_000, p=[0.3,0.7])
+    types = np.random.choice([Type.MARKET.value, Type.LIMIT.value], size=200_000, p=[0.3,0.7])
 
-    sides = np.random.choice([Side.BUY, Side.SELL], size=200_000)
+    sides = np.random.choice([Side.BUY.value, Side.SELL.value], size=200_000)
 
     quantities = np.random.randint(1,101,size=200_000)
     user_uuids = np.array([uuid.uuid4() for _ in range(200000)], dtype=object)
@@ -84,7 +84,7 @@ def generate_active_stream():
             'order_owner_id': user_uuids[i]
         })
         
-    with open("benchmark/data/active_stream.json", "w") as f:
+    with open("benchmark/data/active_stream.json", "wb") as f:
         f.write(orjson.dumps(active_stream))
 
 if __name__ == "__main__":
