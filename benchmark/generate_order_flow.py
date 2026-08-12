@@ -5,6 +5,7 @@ import uuid
 from enum import Enum
 import orjson
 
+
 class Type(str, Enum):
     MARKET="market"
     LIMIT = "limit"
@@ -50,7 +51,8 @@ def generate_resting_book():
             'price': format_as_decimal_string(prices[i]),
             'number_of_shares':str(quantities[i]),
             'is_canceled':False,
-            'order_owner_id':user_uuids[i]
+            'order_owner_id':user_uuids[i],
+            'is_canceled':False
         })
 
     print("Slicing and saving tier files...")
@@ -81,7 +83,8 @@ def generate_active_stream():
             "side": sides[i],
             "price": price_val,
             "number_of_shares": str(quantities[i]),
-            'order_owner_id': user_uuids[i]
+            'order_owner_id': user_uuids[i],
+            'is_canceled':False
         })
         
     with open("benchmark/data/active_stream.json", "wb") as f:
