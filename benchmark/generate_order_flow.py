@@ -29,11 +29,14 @@ def ornstein_Uhlenbeck_price(num_of_orders: int) ->np.ndarray:
     shock_value = np.random.normal(0,1, num_of_orders)
     for t in range(1,num_of_orders):
         prices[t] = prices[t-1] + theta*(center_value - prices[t-1])+sigma*shock_value[t]
+
+
     return prices
 
 def format_as_decimal_string(value:float)->str:
     dec_as_str = Decimal(str(value)).quantize(Decimal('0.00000001'),rounding=ROUND_HALF_UP)
     return str(dec_as_str)
+
 
 def generate_resting_book():
     prices = ornstein_Uhlenbeck_price(50000)
@@ -44,11 +47,17 @@ def generate_resting_book():
 
 
     for i in range(50000):
+        absolute_difference = abs(prices[i] - center_value)
+
+        if sides[i] == Side.BUY.value:
+            safe_price = prices[i] - absolute_difference - 0.01
+        if sides[i] == Side.SELL.value:
+            safe_price = prices[i] + absolute_difference +0.01
         master_resting.append({
             'ticker':'APP',
             'type': Type.LIMIT.value,
             'side':sides[i],
-            'price': format_as_decimal_string(prices[i]),
+            'price': format_as_decimal_string(safe_price),
             'number_of_shares':str(quantities[i]),
             'is_canceled':False,
             'order_owner_id':user_uuids[i],
