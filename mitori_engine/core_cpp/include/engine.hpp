@@ -43,9 +43,12 @@ private:
     std::vector<Trade> match_sell(Order* sell_order);
 
 public:
-    OrderBook(std::string ticker);
+    explicit OrderBook(std::string ticker);
 
-    void process_order(Order* order);
+    std::vector<Trade> process_order(Order* order);
+    Order* tombstone_delete(const std::string& order_uuid);
+    Order* find_order_by_id(const std::string& order_uuid);    
+    std::unordered_map<std::string, uint64_t> get_current_bbo();
     
     void reset();
 };

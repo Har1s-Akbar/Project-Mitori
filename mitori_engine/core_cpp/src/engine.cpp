@@ -40,7 +40,7 @@ void OrderBook::reset(){
     asks = std::priority_queue<Order*, std::vector<Order*>, AskComparator>();
 }
 
-void OrderBook::process_order(Order* order){
+std::vector<Trade> OrderBook::process_order(Order* order){
     order->date_time = current_time++;
     order->is_canceled = false;
     
@@ -53,7 +53,7 @@ void OrderBook::process_order(Order* order){
                 active_uuids[order->order_id] = order;
             }
     }else{
-        match_sell(order);
+        executed_trades = match_sell(order);
         if(order->number_of_shares > 0){
             asks.push(order);
             active_uuids[order->order_id] = order;
@@ -61,11 +61,12 @@ void OrderBook::process_order(Order* order){
     }
     }else if(order->type == Type::MARKET){
         if(order->side == Side::BUY){
-            match_buy(order);
+            executed_trades = match_buy(order);
         }else{
-            match_sell(order);
+            executed_trades = match_sell(order);
         }
     }
+    return executed_trades;
 }
 
 std::vector<Trade> OrderBook::match_buy(Order* buy_order){
@@ -166,4 +167,54 @@ std::vector<Trade> OrderBook::match_sell(Order* sell_order) {
     }
 
     return executed_trades;
+}
+
+Order* OrderBook::find_order_by_id(const std::string& order_id) {
+    auto it = active_uuids.find(order_id);
+    if (it != active_uuids.end()) {
+        return it->second;
+    }
+    return nullptr; 
+}
+
+Order* OrderBook::tombstone_delete(const std::string& order_id) {
+    Order* order = find_order_by_id(order_id);
+    if (order) {
+        order->is_canceled = true;
+        canceled_uuids.insert(order_id);
+        active_uuids.erase(order_id);
+    }
+    return order;
+}
+
+std::unordered_map<std::string, uint64_t> OrderBook::get_current_bbo() {
+    uint64_t best_ask = 0;
+    uint64_t best_bid = 0;
+
+    while (!asks.empty()) {
+        Order* top_ask = asks.top();        
+        if (canceled_uuids.find(top_ask->order_id) == canceled_uuids.end()) {
+            best_ask = top_ask->price;
+            break;
+        } else {
+            asks.pop();
+            canceled_uuids.erase(top_ask->order_id);
+        }
+    }
+    while (!bids.empty()) {
+        Order* top_bid = bids.top();
+        
+        if (canceled_uuids.find(top_bid->order_id) == canceled_uuids.end()) {
+            best_bid = top_bid->price;
+            break;
+        } else {
+            bids.pop();
+            canceled_uuids.erase(top_bid->order_id);
+        }
+    }
+    std::unordered_map<std::string, uint64_t> bbo;
+    bbo["best_ask_price"] = best_ask;
+    bbo["best_bid_price"] = best_bid;
+    
+    return bbo;
 }
