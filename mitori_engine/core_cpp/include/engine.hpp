@@ -17,3 +17,11 @@ public:
     
     void reset();
 };
+
+struct BidComparator {
+    bool operator()(const Order* a, const Order* b) const;
+};
+
+struct AskComparator {
+    bool operator()(const Order* a, const Order* b) const;
+};

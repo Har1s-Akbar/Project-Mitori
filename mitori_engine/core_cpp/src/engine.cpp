@@ -14,3 +14,16 @@ Order* ArenaAllocator::allocate() {
 void ArenaAllocator::reset() {
     offset = 0;
 }
+
+bool BidComparator::operator()(const Order* a, const Order* b) const {
+    if(a->price == b->price){
+        return a->timestamp > b->timestamp;
+    }
+    return a->price < b->price; 
+}
+bool AskComparator::operator()(const Order* a , const Order* b)const{
+    if(a-> price == b->price){
+        return a->timestamp > b->timestamp;
+    }
+    return a->price > b->price;
+}
