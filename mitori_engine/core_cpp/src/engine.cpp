@@ -17,13 +17,13 @@ void ArenaAllocator::reset() {
 
 bool BidComparator::operator()(const Order* a, const Order* b) const {
     if(a->price == b->price){
-        return a->timestamp > b->timestamp;
+        return a->date_time > b->date_time;
     }
     return a->price < b->price; 
 }
 bool AskComparator::operator()(const Order* a , const Order* b)const{
     if(a-> price == b->price){
-        return a->timestamp > b->timestamp;
+        return a->date_time > b->date_time;
     }
     return a->price > b->price;
 }
@@ -36,7 +36,7 @@ void OrderBook::reset(){
 }
 
 void OrderBook::process_order(Order* order){
-    order->timestamp = current_time++;
+    order->date_time = current_time++;
     order->is_canceled = false;
     
     if(order->type == Type::LIMIT){
