@@ -43,7 +43,7 @@ private:
     std::vector<Trade> match_sell(Order* sell_order);
 
 public:
-    OrderBook();
+    OrderBook(std::string ticker);
 
     void process_order(Order* order);
     

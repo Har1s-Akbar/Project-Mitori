@@ -1,5 +1,10 @@
 #include "../include/engine.hpp"
 
+OrderBook::OrderBook(std::string ticker) {
+    this->ticker = ticker;
+    this->current_time = 0;
+}
+
 ArenaAllocator::ArenaAllocator(size_t capacity) : pool(capacity), offset(0) {
     pool.resize(capacity);
 }
@@ -113,4 +118,52 @@ std::vector<Trade> OrderBook::match_buy(Order* buy_order){
             active_uuids.erase(best_ask->order_id);
         }
     }
+}
+std::vector<Trade> OrderBook::match_sell(Order* sell_order) {
+    std::vector<Trade> executed_trades;
+
+    while (!bids.empty() && sell_order->number_of_shares > 0) {
+        Order* best_bid = bids.top();
+        
+        if (canceled_uuids.find(best_bid->order_id) != canceled_uuids.end()) {
+            bids.pop();
+            canceled_uuids.erase(best_bid->order_id);
+            continue;
+        }
+
+        if (sell_order->type == Type::LIMIT && sell_order->price > best_bid->price) {
+            break; 
+        }
+
+        uint64_t trade_shares = std::min(sell_order->number_of_shares, best_bid->number_of_shares);
+        uint64_t trade_price = best_bid->price; 
+
+       if (sell_order->type == Type::LIMIT) {
+            if (sell_order->date_time < best_bid->date_time) {
+                trade_price = sell_order->price;
+            }
+        }
+
+        sell_order->number_of_shares -= trade_shares;
+        best_bid->number_of_shares -= trade_shares;
+
+        Trade t;
+        t.ticker = this->ticker;
+        t.quantity = trade_shares; 
+        t.price_setteled_at = trade_price;
+        t.price_locked_by_user = (sell_order->type == Type::LIMIT) ? sell_order->price : 0;
+        t.buyer_id = best_bid->order_owner_id; 
+        t.seller_id = sell_order->order_owner_id;
+        t.date_time = sell_order->date_time;
+        t.order_id = sell_order->order_id;
+        
+        executed_trades.push_back(t);
+
+        if (best_bid->number_of_shares == 0) {
+            bids.pop();
+            active_uuids.erase(best_bid->order_id);
+        }
+    }
+
+    return executed_trades;
 }
