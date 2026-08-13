@@ -3,6 +3,9 @@
 #include <queue>
 #include <cstdint>
 #include <stdexcept>
+#include <unordered_map>
+#include <unordered_set>
+
 #include "utility_class.hpp"
 
 class ArenaAllocator {
@@ -28,12 +31,16 @@ struct AskComparator {
 
 class OrderBook {
 private:
+    std::string ticker;
     std::priority_queue<Order*, std::vector<Order*>, BidComparator> bids;
     std::priority_queue<Order*, std::vector<Order*>, AskComparator> asks;
     uint64_t current_time;
 
-    void match_buy(Order* buy_order);
-    void match_sell(Order* sell_order);
+    std::unordered_map<std::string,Order*> active_uuids;
+    std::unordered_set<std::string> canceled_uuids;
+
+    std::vector<Trade> match_buy(Order* buy_order);
+    std::vector<Trade> match_sell(Order* sell_order);
 
 public:
     OrderBook();

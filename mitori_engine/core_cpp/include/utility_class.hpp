@@ -12,22 +12,24 @@ enum class Type:uint8_t{
     MARKET = 1
 };
 
-struct alignas(64) Order{
-    std::string ticker;
-    std::string order_id;
-    uint64_t price;
-    uint64_t number_ofshares;
-    uint64_t date_time;
-    Side side;
-    Type type;
-    bool is_canceled;
-    std::string order_owner_id;
-    uint64_t max_auuthorized_funds;
+
+
+struct alignas(128) Order{
+    std::string order_id; //32 byte
+    uint64_t price; // 8 byte
+    uint64_t number_of_shares; // 8 byte 
+    uint64_t date_time; // 8 byte
+    Side side; // 1 byte
+    Type type; // 1 byte
+    bool is_canceled; // 1 byte
+    std::string order_owner_id; // 32 byte
+    uint64_t max_auuthorized_funds; // 1 byte
 };
+// total size of Order struct is 99 bytes, compiler injects 29 bytes , which is a multiple of 64 bytes. This ensures that each Order instance is aligned to a cache line boundary, which can improve performance when accessing Order instances in memory.
 
 struct Trade{
     std::string ticker;
-    uint64_t price;
+    uint64_t quantity;
     uint64_t price_setteled_at;
     uint64_t price_locked_by_user;
     std::string buyer_id;
