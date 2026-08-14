@@ -1,0 +1,25 @@
+cmake_minimum_required(VERSION 3.15)
+project(mitori_engine)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(CMAKE_BUILD_TYPE Release)
+
+find_package(Python 3.14 REQUIRED COMPONENTS Interpreter Development)
+execute_process(
+    COMMAND python -c "import pybind11; print(pybind11.get_cmake_dir())"
+    OUTPUT_VARIABLE PYBIND_DIR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+set(pybind11_DIR "${PYBIND_DIR}")
+find_package(pybind11 REQUIRED)
+
+set(SOURCES 
+    bindings.cpp 
+    src/engine.cpp 
+)
+
+pybind11_add_module(mitori_engine ${SOURCES})
+
+target_include_directories(mitori_engine PRIVATE ${CMAKE_SOURCE_DIR}/include)
