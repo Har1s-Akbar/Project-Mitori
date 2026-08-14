@@ -33,6 +33,7 @@ struct Trade{
     uint64_t price_locked_by_user;
     std::string buyer_id;
     std::string seller_id;
-    uint64_t date_time;
-    std::string order_id;
+    // uint64_t date_time;
+    // std::string order_id;
+    // these date_time and order_id will be configuered in the pybind11 implementation phase
 };
