@@ -169,7 +169,6 @@ async def delete_order(
             pipeline.hincrby(f'cache:positions:{user_id}', f'locked_{ticker}', -number_of_shares_safe)
             
         elif order_canceled.side == Side.BUY:
-            # Simplified the math to avoid floating point division errors
             total_price = int(order_canceled.price * order_canceled.number_of_shares / multiplier)
             pipeline.hincrby(f'cache:portfolio:{user_id}', 'available_cash', total_price)
             pipeline.hincrby(f'cache:portfolio:{user_id}', 'locked_balance', -total_price)
@@ -181,7 +180,6 @@ async def delete_order(
             approximate=True
         )
             
-        # FIX 4: Added await
         await pipeline.execute()
         
     logger.info("cancelled_trade_pushed_to_stream", order_id=order_id, ticker=order_canceled.ticker)
