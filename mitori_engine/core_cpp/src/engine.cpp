@@ -79,7 +79,7 @@ std::vector<Trade> OrderBook::match_buy(Order* buy_order){
             }
         }
 
-        if(buy_order->type == Type::MARKET && buy_order->max_authorized_funds > 0){
+        if(buy_order->type == Type::MARKET && buy_order->max_authorized_funds != UINT64_MAX){
             uint64_t total_cost = trade_quantity * trade_price;
             if(total_spent + total_cost > buy_order->max_authorized_funds){
                 break;
@@ -96,7 +96,7 @@ std::vector<Trade> OrderBook::match_buy(Order* buy_order){
         t.price_locked_by_user = (buy_order->type == Type::LIMIT) ? buy_order->price : 0;
         t.buyer_id = buy_order->order_owner_id;
         t.seller_id = best_ask->order_owner_id;
-        
+
         executed_trades.push_back(t);
 
         if (best_ask->number_of_shares == 0) {
@@ -141,8 +141,6 @@ std::vector<Trade> OrderBook::match_sell(Order* sell_order) {
         t.price_locked_by_user = (sell_order->type == Type::LIMIT) ? sell_order->price : 0;
         t.buyer_id = best_bid->order_owner_id; 
         t.seller_id = sell_order->order_owner_id;
-        t.date_time = sell_order->date_time;
-        t.order_id = sell_order->order_id;
         
         executed_trades.push_back(t);
 
