@@ -5,21 +5,6 @@ OrderBook::OrderBook(std::string ticker) {
     this->current_time = 0;
 }
 
-ArenaAllocator::ArenaAllocator(size_t capacity) : pool(capacity), offset(0) {
-    pool.resize(capacity);
-}
-
-Order* ArenaAllocator::allocate() {
-    if (offset >= pool.size()) {
-        throw std::runtime_error("ArenaAllocator: Out of memory");
-    }
-    return &pool[offset++];
-}
-
-void ArenaAllocator::reset() {
-    offset = 0;
-}
-
 bool BidComparator::operator()(const Order* a, const Order* b) const {
     if(a->price == b->price){
         return a->date_time > b->date_time;
@@ -94,9 +79,9 @@ std::vector<Trade> OrderBook::match_buy(Order* buy_order){
             }
         }
 
-        if(buy_order->type == Type::MARKET && buy_order->max_auuthorized_funds > 0){
+        if(buy_order->type == Type::MARKET && buy_order->max_authorized_funds > 0){
             uint64_t total_cost = trade_quantity * trade_price;
-            if(total_spent + total_cost > buy_order->max_auuthorized_funds){
+            if(total_spent + total_cost > buy_order->max_authorized_funds){
                 break;
             }
             total_spent += total_cost;
@@ -119,6 +104,7 @@ std::vector<Trade> OrderBook::match_buy(Order* buy_order){
             active_uuids.erase(best_ask->order_id);
         }
     }
+    return executed_trades;
 }
 std::vector<Trade> OrderBook::match_sell(Order* sell_order) {
     std::vector<Trade> executed_trades;
