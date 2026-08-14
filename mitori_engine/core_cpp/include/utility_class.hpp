@@ -23,9 +23,8 @@ struct alignas(128) Order{
     Type type; // 1 byte
     bool is_canceled; // 1 byte
     std::string order_owner_id; // 32 byte
-    uint64_t max_authorized_funds; // 1 byte
+    uint64_t max_authorized_funds = UINT64_MAX; // 1 byte
 };
-// total size of Order struct is 99 bytes, compiler injects 29 bytes , which is a multiple of 64 bytes. This ensures that each Order instance is aligned to a cache line boundary, which can improve performance when accessing Order instances in memory.
 
 struct Trade{
     std::string ticker;
