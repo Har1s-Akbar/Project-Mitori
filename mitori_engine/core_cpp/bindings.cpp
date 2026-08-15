@@ -75,12 +75,32 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
             py::arg("number_of_shares"),
             py::arg("max_authorized_funds") = std::nullopt)
 
-        .def("tombstone_delete", [](OrderBook& book, uint64_t order_id_high, uint64_t order_id_low) {
+        .def("tombstone_delete", [](OrderBook& book, uint64_t order_id_high, uint64_t order_id_low)-> py::object {
             unsigned __int128 full_order_id = (static_cast<unsigned __int128>(order_id_high) << 64) | order_id_low;
-            book.tombstone_delete(full_order_id);
+
+            Order* canceled_order = book.tombstone_delete(full_order_id);
+
+            if(!canceled_order){
+                return py::none();
+            }
+            unsigned __int128 owner_id = book.metadata_vault[canceled_order->metadata_index].owner_id;
+            uint64_t owner_id_high = static_cast<uint64_t>(owner_id >> 64);
+            uint64_t owner_id_low = static_cast<uint64_t>(owner_id);
+
+            py::dict result;
+            result["owner_id_high"] = owner_id_high;
+            result["owner_id_low"] = owner_id_low;
+            result["side"] = canceled_order->side;
+            result["type"] = canceled_order->type;
+            result["price"] = canceled_order->price;
+            result["number_of_shares"] = canceled_order->number_of_shares;
+            result["is_canceled"] = canceled_order->is_canceled; 
+
+            return result;
         },
             py::arg("order_id_high"),
-            py::arg("order_id_low"))
+            py::arg("order_id_low")
+        )
         .def("get_current_bbo", &OrderBook::get_current_bbo);
         
         m.def("reset_memory", &ArenaAllocator::reset);
