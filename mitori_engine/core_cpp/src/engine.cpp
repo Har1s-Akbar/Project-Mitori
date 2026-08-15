@@ -1,5 +1,7 @@
 #include "../include/engine.hpp"
 
+const uint64_t PRICE_PRECISION = 100000000;
+
 OrderBook::OrderBook(std::string ticker) {
     this->ticker = ticker;
     this->current_time = 0;
@@ -80,7 +82,13 @@ std::vector<Trade> OrderBook::match_buy(Order* buy_order){
         }
 
         if(buy_order->type == Type::MARKET && buy_order->max_authorized_funds != UINT64_MAX){
-            uint64_t total_cost = trade_quantity * trade_price;
+            unsigned __int128 scaled_cost = (unsigned __int128)trade_quantity * (unsigned __int128)trade_price;
+            uint64_t total_cost = static_cast<uint64_t>(scaled_cost / PRICE_PRECISION);
+
+            if(total_cost % PRICE_PRECISION != 0){
+                total_cost += 1;
+            }
+
             if(total_spent + total_cost > buy_order->max_authorized_funds){
                 break;
             }
