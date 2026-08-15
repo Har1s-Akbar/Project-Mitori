@@ -75,8 +75,7 @@ class MitoriGateway:
 
     def cancel_order(self, order_id: uuid.UUID) -> Optional[Order]:
         oid_high, oid_low = self._split_uuid(order_id)
-        
-        # 1. Call the C++ engine, which now returns a dictionary of raw integers/enums
+
         canceled_data = self.book.tombstone_delete(
             order_id_high=oid_high,
             order_id_low=oid_low
