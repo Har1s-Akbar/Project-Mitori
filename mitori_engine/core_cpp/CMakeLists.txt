@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(mitori_engine)
+project(mitori_engine_cpp)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -16,10 +16,14 @@ set(pybind11_DIR "${PYBIND_DIR}")
 find_package(pybind11 REQUIRED)
 
 set(SOURCES 
-    bindings.cpp 
+    src/bindings.cpp   
     src/engine.cpp 
 )
 
 pybind11_add_module(mitori_engine ${SOURCES})
 
 target_include_directories(mitori_engine PRIVATE ${CMAKE_SOURCE_DIR}/include)
+
+if(MINGW)
+    target_link_options(mitori_engine PRIVATE "-static-libstdc++" "-static-libgcc")
+endif()

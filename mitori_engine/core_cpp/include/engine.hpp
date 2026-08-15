@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
+#include <string>
 
 #include "utility_class.hpp"
 
@@ -57,26 +58,40 @@ struct AskComparator {
     bool operator()(const Order* a, const Order* b) const;
 };
 
+// Custom extremely fast Hasher for 128-bit integers so we can use them in unordered_map
+struct Int128Hash {
+    std::size_t operator()(const unsigned __int128& k) const {
+        uint64_t high = static_cast<uint64_t>(k >> 64);
+        uint64_t low = static_cast<uint64_t>(k);
+        // XOR the high and low bits together for a fast, zero-allocation hash
+        return std::hash<uint64_t>()(high) ^ (std::hash<uint64_t>()(low) << 1);
+    }
+};
+
 class OrderBook {
 private:
     std::priority_queue<Order*, std::vector<Order*>, BidComparator> bids;
     std::priority_queue<Order*, std::vector<Order*>, AskComparator> asks;
     uint64_t current_time;
 
-    std::unordered_map<std::string,Order*> active_uuids;
-    std::unordered_set<std::string> canceled_uuids;
+    // Use our custom Int128Hash to keep the maps entirely string-free!
+    std::unordered_map<unsigned __int128, Order*, Int128Hash> active_orders;
+    std::unordered_set<unsigned __int128, Int128Hash> canceled_orders;
 
 public:
     explicit OrderBook(std::string ticker);
-
+    
+    std::vector<OrderMetadata> metadata_vault; // The Cold Storage Vault
     
     std::vector<Trade> match_buy(Order* buy_order);
     std::vector<Trade> match_sell(Order* sell_order);
 
-    std::string ticker;
+    std::string ticker; // Ticker string is safe here (initialized once)
     std::vector<Trade> process_order(Order* order);
-    Order* tombstone_delete(const std::string& order_uuid);
-    Order* find_order_by_id(const std::string& order_uuid);    
+    
+    // Updated to take the raw 128-bit integer instead of strings
+    Order* tombstone_delete(unsigned __int128 order_id);
+    Order* find_order_by_id(unsigned __int128 order_id);    
     std::unordered_map<std::string, uint64_t> get_current_bbo();
     
     void reset();
