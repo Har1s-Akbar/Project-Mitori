@@ -22,17 +22,15 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
 
     py::class_<Trade>(m, "Trade")
         .def_readonly("ticker", &Trade::ticker)
-        .def_property_readonly("quantity", [](const Trade& t) {
-            return static_cast<uint64_t>(t.quantity) / PRICE_PRECISION;
-        })
+        
+        .def_readonly("price_locked_by_user", &Trade::price_locked_by_user)
+        .def_readonly("price_setteled_at", &Trade::price_setteled_at)
+        .def_readonly("quantity", &Trade::quantity)
         .def_property_readonly("buyer_id_high", [](const Trade& t) { return static_cast<uint64_t>(t.buyer_id >> 64); })
         .def_property_readonly("buyer_id_low", [](const Trade& t) { return static_cast<uint64_t>(t.buyer_id); })
         .def_property_readonly("seller_id_high", [](const Trade& t) { return static_cast<uint64_t>(t.seller_id >> 64); })
-        .def_property_readonly("seller_id_low", [](const Trade& t) { return static_cast<uint64_t>(t.seller_id); })
+        .def_property_readonly("seller_id_low", [](const Trade& t) { return static_cast<uint64_t>(t.seller_id); });
         
-        .def_property_readonly("price_locked_by_user", &Trade::price_locked_by_user)
-        .def_property_readonly("price_setteled_at", &Trade::price_setteled_at);
-
     py::class_<OrderBook>(m,"OrderBook")
         .def(py::init<std::string>(), py::arg("ticker"))
         .def("process_order", [](OrderBook & book,
@@ -56,9 +54,12 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
                         order->type = type;
                         order->side = side;
                         order->is_canceled = is_canceled;
+                        order->price = price;
+                        order->number_of_shares = number_of_shares;
+                        
                         
                         if (max_authorized_funds.has_value()) {
-                            order->max_authorized_funds = static_cast<uint64_t>(max_authorized_funds.value() * PRICE_PRECISION);
+                            order->max_authorized_funds = max_authorized_funds.value();
                         } else {
                             order->max_authorized_funds = UINT64_MAX; 
                         }
@@ -69,7 +70,7 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
             py::arg("order_owner_id_high"),
             py::arg("order_owner_id_low"),
             py::arg("side"),
-            py::arg("order_type"),
+            py::arg("type"),
             py::arg("is_canceled"),
             py::arg("price"),
             py::arg("number_of_shares"),
