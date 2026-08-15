@@ -3,7 +3,7 @@ from pathlib import Path
 import time
 import uuid
 from decimal import Decimal
-from core.models import Trade
+from core.models import Trade, Order
 from typing import Optional
 
 BUILD_DIR = Path(__file__).resolve().parent.parent / "core_cpp" / "build"
@@ -69,14 +69,36 @@ class MitoriGateway:
                 seller_id= self._merge_uuid(t.seller_id_high, t.seller_id_low)
             )
             processed_trades.append(trade_object)
-
             
         return processed_trades
 
-    def cancel_order(self, order_id: uuid.UUID):
+    def cancel_order(self, order_id: uuid.UUID) -> Optional[Order]:
         oid_high, oid_low = self._split_uuid(order_id)
-        self.book.tombstone_delete(oid_high, oid_low)
+        
+        # 1. Call the C++ engine, which now returns a dictionary of raw integers/enums
+        canceled_data = self.book.tombstone_delete(
+            order_id_high=oid_high,
+            order_id_low=oid_low
+        )
 
+        if not canceled_data:
+            return None
+ 
+        return Order(
+            order_id=order_id,
+            ticker=self.ticker,
+            side=canceled_data["side"],
+            type=canceled_data["type"],
+            # Apply exact Decimal reconstruction 
+            price=self._to_decimal(canceled_data["price"]),
+            number_of_shares=self._to_decimal(canceled_data["number_of_shares"]),
+            order_owner_id=self._merge_uuid(
+                canceled_data["owner_id_high"], 
+                canceled_data["owner_id_low"]
+            ),
+            is_canceled=True
+        )
+    
     def get_bbo(self) -> dict[str, int]:
         raw_bbo = self.book.get_current_bbo()
 
