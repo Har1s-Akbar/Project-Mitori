@@ -30,7 +30,7 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
         .def_property_readonly("price_locked_by_user", [](const Trade& t) {
             return static_cast<double>(t.price_locked_by_user) / PRICE_PRECISION;
         })
-        .def_property_readonly("price_settled_at", [](const Trade& t) {
+        .def_property_readonly("price_setteled_at", [](const Trade& t) {
             return static_cast<double>(t.price_setteled_at) / PRICE_PRECISION;
         });
 
