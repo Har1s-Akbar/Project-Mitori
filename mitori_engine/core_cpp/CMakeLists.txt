@@ -16,14 +16,14 @@ set(pybind11_DIR "${PYBIND_DIR}")
 find_package(pybind11 REQUIRED)
 
 set(SOURCES 
-    src/bindings.cpp   
-    src/engine.cpp 
+    ${CMAKE_CURRENT_SOURCE_DIR}/bindings.cpp   
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/engine.cpp 
 )
 
-pybind11_add_module(mitori_engine ${SOURCES})
+pybind11_add_module(mitori_engine_cpp ${SOURCES})
 
-target_include_directories(mitori_engine PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(mitori_engine_cpp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 if(MINGW)
-    target_link_options(mitori_engine PRIVATE "-static-libstdc++" "-static-libgcc")
+    target_link_options(mitori_engine_cpp PRIVATE "-static-libstdc++" "-static-libgcc")
 endif()
