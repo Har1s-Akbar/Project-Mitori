@@ -33,7 +33,7 @@ class MitoriGateway:
         return Decimal(raw_val) / self.PRECISION_MULTIPLIER
 
     def submit_order(self, order_id: uuid.UUID, owner_id: uuid.UUID, 
-                     side: engine.Side, order_type: engine.Type, price: Optional[Decimal],
+                     side: engine.Side, type: engine.Type, price: Optional[Decimal],
                      shares: Decimal, max_funds: Optional[Decimal] = None):
         
         oid_high, oid_low = self._split_uuid(order_id)
@@ -47,9 +47,9 @@ class MitoriGateway:
             order_id_high=oid_high,
             order_id_low=oid_low,
             order_owner_id_high=own_high,
-            owner_owner_id_low=own_low,
+            order_owner_id_low=own_low,
             side=side,
-            type=order_type,
+            type=type,
             is_canceled=False,
             price=price_scaled,
             number_of_shares=shares_scaled,
