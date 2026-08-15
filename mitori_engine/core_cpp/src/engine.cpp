@@ -13,8 +13,9 @@ bool BidComparator::operator()(const Order* a, const Order* b) const {
     }
     return a->price < b->price; 
 }
+
 bool AskComparator::operator()(const Order* a , const Order* b)const{
-    if(a-> price == b->price){
+    if(a->price == b->price){
         return a->date_time > b->date_time;
     }
     return a->price > b->price;
@@ -31,43 +32,46 @@ std::vector<Trade> OrderBook::process_order(Order* order){
     order->date_time = current_time++;
     order->is_canceled = false;
     
+    unsigned __int128 current_order_id = metadata_vault[order->metadata_index].order_id;
+    
     std::vector<Trade> executed_trades;
     if(order->type == Type::LIMIT){
         if(order->side == Side::BUY){
             executed_trades = match_buy(order);
             if(order->number_of_shares > 0){
                 bids.push(order);
-                active_uuids[order->order_id] = order;
+                active_orders[current_order_id] = order;
             }
-    }else{
-        executed_trades = match_sell(order);
-        if(order->number_of_shares > 0){
-            asks.push(order);
-            active_uuids[order->order_id] = order;
+        } else {
+            executed_trades = match_sell(order);
+            if(order->number_of_shares > 0){
+                asks.push(order);
+                active_orders[current_order_id] = order;
+            }
         }
-    }
-    }else if(order->type == Type::MARKET){
+    } else if(order->type == Type::MARKET){
         if(order->side == Side::BUY){
             executed_trades = match_buy(order);
-        }else{
+        } else {
             executed_trades = match_sell(order);
         }
     }
     return executed_trades;
 }
-
 std::vector<Trade> OrderBook::match_buy(Order* buy_order){
     std::vector<Trade> executed_trades;
-
     uint64_t total_spent = 0;
-    while(!asks.empty() && buy_order->number_of_shares>0){
+    
+    while(!asks.empty() && buy_order->number_of_shares > 0){
         Order* best_ask = asks.top();
-
-        if(canceled_uuids.find(best_ask->order_id) != canceled_uuids.end()){
+        
+        if(best_ask->is_canceled){
             asks.pop();
-            canceled_uuids.erase(best_ask->order_id);
+            unsigned __int128 best_ask_id = metadata_vault[best_ask->metadata_index].order_id;
+            canceled_orders.erase(best_ask_id);
             continue;
         }
+        
         if(buy_order->type == Type::LIMIT && buy_order->price < best_ask->price){
             break;
         }
@@ -94,6 +98,7 @@ std::vector<Trade> OrderBook::match_buy(Order* buy_order){
             }
             total_spent += total_cost;
         }
+        
         buy_order->number_of_shares -= trade_quantity;
         best_ask->number_of_shares -= trade_quantity;
 
@@ -102,27 +107,31 @@ std::vector<Trade> OrderBook::match_buy(Order* buy_order){
         t.quantity = trade_quantity; 
         t.price_setteled_at = trade_price; 
         t.price_locked_by_user = (buy_order->type == Type::LIMIT) ? buy_order->price : 0;
-        t.buyer_id = buy_order->order_owner_id;
-        t.seller_id = best_ask->order_owner_id;
+        
+        t.buyer_id = metadata_vault[buy_order->metadata_index].owner_id;
+        t.seller_id = metadata_vault[best_ask->metadata_index].owner_id;
 
         executed_trades.push_back(t);
 
         if (best_ask->number_of_shares == 0) {
             asks.pop();
-            active_uuids.erase(best_ask->order_id);
+            unsigned __int128 best_ask_id = metadata_vault[best_ask->metadata_index].order_id;
+            active_orders.erase(best_ask_id);
         }
     }
     return executed_trades;
 }
+
 std::vector<Trade> OrderBook::match_sell(Order* sell_order) {
     std::vector<Trade> executed_trades;
 
     while (!bids.empty() && sell_order->number_of_shares > 0) {
         Order* best_bid = bids.top();
         
-        if (canceled_uuids.find(best_bid->order_id) != canceled_uuids.end()) {
+        if (best_bid->is_canceled) {
             bids.pop();
-            canceled_uuids.erase(best_bid->order_id);
+            unsigned __int128 best_bid_id = metadata_vault[best_bid->metadata_index].order_id;
+            canceled_orders.erase(best_bid_id);
             continue;
         }
 
@@ -133,7 +142,7 @@ std::vector<Trade> OrderBook::match_sell(Order* sell_order) {
         uint64_t trade_shares = std::min(sell_order->number_of_shares, best_bid->number_of_shares);
         uint64_t trade_price = best_bid->price; 
 
-       if (sell_order->type == Type::LIMIT) {
+        if (sell_order->type == Type::LIMIT) {
             if (sell_order->date_time < best_bid->date_time) {
                 trade_price = sell_order->price;
             }
@@ -147,36 +156,20 @@ std::vector<Trade> OrderBook::match_sell(Order* sell_order) {
         t.quantity = trade_shares; 
         t.price_setteled_at = trade_price;
         t.price_locked_by_user = (sell_order->type == Type::LIMIT) ? sell_order->price : 0;
-        t.buyer_id = best_bid->order_owner_id; 
-        t.seller_id = sell_order->order_owner_id;
+        
+        t.buyer_id = metadata_vault[best_bid->metadata_index].owner_id; 
+        t.seller_id = metadata_vault[sell_order->metadata_index].owner_id;
         
         executed_trades.push_back(t);
 
         if (best_bid->number_of_shares == 0) {
             bids.pop();
-            active_uuids.erase(best_bid->order_id);
+            unsigned __int128 best_bid_id = metadata_vault[best_bid->metadata_index].order_id;
+            active_orders.erase(best_bid_id);
         }
     }
 
     return executed_trades;
-}
-
-Order* OrderBook::find_order_by_id(const std::string& order_id) {
-    auto it = active_uuids.find(order_id);
-    if (it != active_uuids.end()) {
-        return it->second;
-    }
-    return nullptr; 
-}
-
-Order* OrderBook::tombstone_delete(const std::string& order_id) {
-    Order* order = find_order_by_id(order_id);
-    if (order) {
-        order->is_canceled = true;
-        canceled_uuids.insert(order_id);
-        active_uuids.erase(order_id);
-    }
-    return order;
 }
 
 std::unordered_map<std::string, uint64_t> OrderBook::get_current_bbo() {
@@ -185,28 +178,51 @@ std::unordered_map<std::string, uint64_t> OrderBook::get_current_bbo() {
 
     while (!asks.empty()) {
         Order* top_ask = asks.top();        
-        if (canceled_uuids.find(top_ask->order_id) == canceled_uuids.end()) {
+        
+        if (!top_ask->is_canceled) {
             best_ask = top_ask->price;
             break;
         } else {
             asks.pop();
-            canceled_uuids.erase(top_ask->order_id);
+            unsigned __int128 top_ask_id = metadata_vault[top_ask->metadata_index].order_id;
+            canceled_orders.erase(top_ask_id);
         }
     }
+    
     while (!bids.empty()) {
         Order* top_bid = bids.top();
         
-        if (canceled_uuids.find(top_bid->order_id) == canceled_uuids.end()) {
+        if (!top_bid->is_canceled) {
             best_bid = top_bid->price;
             break;
         } else {
             bids.pop();
-            canceled_uuids.erase(top_bid->order_id);
+            unsigned __int128 top_bid_id = metadata_vault[top_bid->metadata_index].order_id;
+            canceled_orders.erase(top_bid_id);
         }
     }
+    
     std::unordered_map<std::string, uint64_t> bbo;
     bbo["best_ask_price"] = best_ask;
     bbo["best_bid_price"] = best_bid;
     
     return bbo;
+}
+
+Order* OrderBook::find_order_by_id(unsigned __int128 order_id) {
+    auto it = active_orders.find(order_id);
+    if (it != active_orders.end()) {
+        return it->second;
+    }
+    return nullptr; 
+}
+
+Order* OrderBook::tombstone_delete(unsigned __int128 order_id) {
+    Order* order = find_order_by_id(order_id);
+    if (order) {
+        order->is_canceled = true;
+        canceled_orders.insert(order_id);
+        active_orders.erase(order_id);
+    }
+    return order;
 }
