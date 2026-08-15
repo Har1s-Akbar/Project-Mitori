@@ -3,69 +3,109 @@ from pathlib import Path
 import time
 import uuid
 from decimal import Decimal
-from core.models import Type , Side
+from core.models import Trade, Order
+from typing import Optional
 
 BUILD_DIR = Path(__file__).resolve().parent.parent / "core_cpp" / "build"
 sys.path.append(str(BUILD_DIR))
 
-import mitori_engine_cpp
+import mitori_engine_cpp as engine
+
+
+PRICE_PRECISION = Decimal("100000000");
+
 class MitoriGateway:
     def __init__(self, ticker: str):
-        self.book = mitori_engine_cpp.OrderBook(ticker)
+        self.book = engine.OrderBook(ticker)
 
     def _split_uuid(self, uid: uuid.UUID) -> tuple[int, int]:
-        uid_int = uid.int
-        return uid_int >> 64, uid_int & 0xFFFFFFFFFFFFFFFF
+        if uid is None:
+            return (0, 0)
+        int_val = uid.int
+        high = int_val >> 64
+        low = int_val & 0xFFFFFFFFFFFFFFFF
+        return (high, low)
 
-    def _stitch_uuid(self, high: int, low: int) -> uuid.UUID:
-        return uuid.UUID(int=((high << 64) | low))
+    def _merge_uuid(self, high: int, low: int) -> uuid.UUID:
+        return uuid.UUID(int=(high << 64) | low)
+
+    def _to_decimal(self, raw_val: int) -> Decimal:
+        return Decimal(raw_val) / self.PRECISION_MULTIPLIER
 
     def submit_order(self, order_id: uuid.UUID, owner_id: uuid.UUID, 
-                     side: mitori_engine_cpp.Side, order_type: mitori_engine_cpp.Type, price: Decimal,
-                     shares: Decimal, max_funds: Decimal = None):
+                     side: engine.Side, order_type: engine.Type, price: Optional[Decimal],
+                     shares: Decimal, max_funds: Optional[Decimal] = None):
         
         oid_high, oid_low = self._split_uuid(order_id)
         own_high, own_low = self._split_uuid(owner_id)
-        
-        cpp_side = mitori_engine_cpp.Side.BUY if side.upper() == "BUY" else mitori_engine_cpp.Side.SELL
-        cpp_type = mitori_engine_cpp.Type.LIMIT if order_type.upper() == "LIMIT" else mitori_engine_cpp.Type.MARKET
+
+        price_scaled = int(price * PRICE_PRECISION) if price is not None else None
+        shares_scaled = int(shares * PRICE_PRECISION)
+        max_funds_scaled = int(max_funds * PRICE_PRECISION) if max_funds is not None  else None
 
         raw_trades = self.book.process_order(
             order_id_high=oid_high,
             order_id_low=oid_low,
-            owner_id_high=own_high,
-            owner_id_low=own_low,
+            order_owner_id_high=own_high,
+            owner_owner_id_low=own_low,
             side=side,
             type=order_type,
             is_canceled=False,
-            price=price,
-            number_of_shares=shares,
-            max_authorized_funds=max_funds if max_funds is not None else 0.0
+            price=price_scaled,
+            number_of_shares=shares_scaled,
+            max_authorized_funds=max_funds_scaled
         )
         
         execution_timestamp = time.time_ns() 
 
         processed_trades = []
         for t in raw_trades:
-            processed_trades.append({
-                "order_id": uuid.uuid4(),
-                "date_time": execution_timestamp,
-                "ticker": t.ticker,
-                "buyer_id": self._stitch_uuid(t.buyer_id_high, t.buyer_id_low),
-                "seller_id": self._stitch_uuid(t.seller_id_high, t.seller_id_low),
-                "quantity": t.quantity,
-                "price_setteled_at": t.price_setteled_at,
-                "price_locked_by_user": t.price_locked_by_user
-            })
+            trade_object = Trade(
+                ticker= t.ticker,
+                quantity= self._to_decimal(t.quantity),
+                price_setteled_at= self._to_decimal(t.price_setteled_at),
+                price_locked_by_user= self._to_decimal(t.price_locked_by_user),
+                buyer_id= self._merge_uuid(t.buyer_id_high, t.buyer_id_low),
+                seller_id= self._merge_uuid(t.seller_id_high, t.seller_id_low)
+            )
+            processed_trades.append(trade_object)
             
         return processed_trades
 
-    def cancel_order(self, order_id: uuid.UUID):
+    def cancel_order(self, order_id: uuid.UUID) -> Optional[Order]:
         oid_high, oid_low = self._split_uuid(order_id)
-        self.book.tombstone_delete(oid_high, oid_low)
+        
+        # 1. Call the C++ engine, which now returns a dictionary of raw integers/enums
+        canceled_data = self.book.tombstone_delete(
+            order_id_high=oid_high,
+            order_id_low=oid_low
+        )
 
-    def get_bbo(self) -> dict:
-        return self.book.get_current_bbo()
+        if not canceled_data:
+            return None
+ 
+        return Order(
+            order_id=order_id,
+            ticker=self.ticker,
+            side=canceled_data["side"],
+            type=canceled_data["type"],
+            # Apply exact Decimal reconstruction 
+            price=self._to_decimal(canceled_data["price"]),
+            number_of_shares=self._to_decimal(canceled_data["number_of_shares"]),
+            order_owner_id=self._merge_uuid(
+                canceled_data["owner_id_high"], 
+                canceled_data["owner_id_low"]
+            ),
+            is_canceled=True
+        )
+    
+    def get_bbo(self) -> dict[str, int]:
+        raw_bbo = self.book.get_current_bbo()
+
+        return {
+            "best_ask_price" : self._to_decimal(raw_bbo.get("best_ask_price"),int(0)),
+            "best_bid_price":self._to_decimal(raw_bbo.get("best_bid_price"), int(0))
+        }
         
     def reset_engine(self):
-        mitori_engine_cpp.reset_memory()
+        engine.reset_memory()
