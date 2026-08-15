@@ -3,7 +3,7 @@ from pathlib import Path
 import time
 import uuid
 from decimal import Decimal
-from core.models import Type , Side
+from core.models import Trade
 from typing import Optional
 
 BUILD_DIR = Path(__file__).resolve().parent.parent / "core_cpp" / "build"
@@ -60,16 +60,16 @@ class MitoriGateway:
 
         processed_trades = []
         for t in raw_trades:
-            processed_trades.append({
-                "ticker": t.ticker,
-                "quantity": self._to_decimal(t.quantity),
-                "price_setteled_at": self._to_decimal(t.price_setteled_at),
-                "price_locked_by_user": self._to_decimal(t.price_locked_by_user),
-                "buyer_id": self._merge_uuid(t.buyer_id_high, t.buyer_id_low),
-                "seller_id": self._merge_uuid(t.seller_id_high, t.seller_id_low),
-                "date_time": execution_timestamp,
-                "order_id": uuid.uuid4(),
-            })
+            trade_object = Trade(
+                ticker= t.ticker,
+                quantity= self._to_decimal(t.quantity),
+                price_setteled_at= self._to_decimal(t.price_setteled_at),
+                price_locked_by_user= self._to_decimal(t.price_locked_by_user),
+                buyer_id= self._merge_uuid(t.buyer_id_high, t.buyer_id_low),
+                seller_id= self._merge_uuid(t.seller_id_high, t.seller_id_low)
+            )
+            processed_trades.append(trade_object)
+
             
         return processed_trades
 
