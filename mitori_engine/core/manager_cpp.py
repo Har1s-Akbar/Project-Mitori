@@ -2,7 +2,6 @@ from core.gateway import MitoriGateway
 
 class EngineManager:
     def __init__(self, supported_tickers: list[str]):
-        # Initialize an isolated MitoriGateway per valid ticker symbol
         self._gateways: dict[str, MitoriGateway] = {
             ticker: MitoriGateway(ticker=ticker) for ticker in supported_tickers
         }

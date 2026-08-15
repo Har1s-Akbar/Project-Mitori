@@ -12,11 +12,12 @@ sys.path.append(str(BUILD_DIR))
 import mitori_engine_cpp as engine
 
 
-PRICE_PRECISION = Decimal("100000000");
 
 class MitoriGateway:
     def __init__(self, ticker: str):
         self.book = engine.OrderBook(ticker)
+        self.PRICE_PRECISION = Decimal("100000000");
+        self.ticker = ticker
 
     def _split_uuid(self, uid: uuid.UUID) -> tuple[int, int]:
         if uid is None:
@@ -39,9 +40,9 @@ class MitoriGateway:
         oid_high, oid_low = self._split_uuid(order_id)
         own_high, own_low = self._split_uuid(owner_id)
 
-        price_scaled = int(price * PRICE_PRECISION) if price is not None else None
-        shares_scaled = int(shares * PRICE_PRECISION)
-        max_funds_scaled = int(max_funds * PRICE_PRECISION) if max_funds is not None  else None
+        price_scaled = int(price * self.PRICE_PRECISION) if price is not None else None
+        shares_scaled = int(shares * self.PRICE_PRECISION)
+        max_funds_scaled = int(max_funds * self.PRICE_PRECISION) if max_funds is not None  else None
 
         raw_trades = self.book.process_order(
             order_id_high=oid_high,
@@ -74,8 +75,7 @@ class MitoriGateway:
 
     def cancel_order(self, order_id: uuid.UUID) -> Optional[Order]:
         oid_high, oid_low = self._split_uuid(order_id)
-        
-        # 1. Call the C++ engine, which now returns a dictionary of raw integers/enums
+
         canceled_data = self.book.tombstone_delete(
             order_id_high=oid_high,
             order_id_low=oid_low
