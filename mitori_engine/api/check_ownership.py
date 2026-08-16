@@ -6,7 +6,6 @@ from api.dependencies import get_matching_engine
 from core.interfaces import EngineProtocol
 
 def check_owner_ship(order_id:str, ticker:str, user:AuthenticatedUser=Depends(is_user_Authenticated), engine:EngineProtocol= Depends(get_matching_engine)) -> AuthenticatedUser:
-
     try:
         valid_uuid = UUID(order_id)
     except ValueError:

@@ -82,7 +82,7 @@ async def logging_middleware(request: Request, call_next):
 @app.post("/order")
 async def place_order(
     order: OrderReq,
-    engine : EngineProtocol = Depends(get_matching_engine),
+    # engine : EngineProtocol = Depends(get_matching_engine),
     redis_client: redis.Redis = Depends(get_redis),
     current_user: AuthenticatedUser = Depends(have_funds)
 ):
@@ -91,7 +91,9 @@ async def place_order(
 
     # price_scaled_up = int(Decimal(str(order.price)) * multiplier) if order.price else None
     # shares_scaled_up = int(Decimal(str(order.number_of_shares)) * multiplier)
-
+    
+    ticker = order.ticker
+    engine = get_matching_engine(ticker=ticker)
     executed_trades = engine.submit_order(
             ticker = order.ticker,
             side = order.side,

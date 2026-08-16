@@ -1,6 +1,7 @@
 import heapq
 from .models import Order, Trade, Side, Type
 from decimal import Decimal
+from uuid import UUID
 
 class OrderBook():
     ticker: str
@@ -126,7 +127,7 @@ class OrderBook():
                 
         return trades_executed
 
-    def tombstone_delete(self, order_uuid):
+    def tombstone_delete(self, order_uuid : UUID):
         order_id_str = str(order_uuid)
         order_delete = self.active_uuids.pop(order_id_str, None)
         
