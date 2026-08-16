@@ -7,18 +7,19 @@ import redis.asyncio as redis
 from infrastructure.client import create_redis_pool
 from api.security import AuthenticatedUser, is_user_Authenticated
 from api.check_ownership import check_owner_ship
-from api.dependencies import get_redis
+from api.dependencies import get_redis, get_matching_engine
 import json
 import dataclasses
 from api.have_funds import have_funds
 from schemas.schema import MARKET, OrderReq
-from core.models import Order, Side, Type
+from core.models import Order, Side
 import os
 from dotenv import load_dotenv
 from decimal import Decimal
 from logger import configure_fastapi_logging
 import structlog
-import time 
+import time
+from core.gateway import MitoriGateway
 
 load_dotenv()
 
@@ -76,7 +77,8 @@ async def logging_middleware(request: Request, call_next):
 
 @app.post("/order")
 async def place_order(
-    order: OrderReq, 
+    order: OrderReq,
+    # engine : MitoriGateway = Depends(get_matching_engine),
     redis_client: redis.Redis = Depends(get_redis),
     current_user: AuthenticatedUser = Depends(have_funds)
 ):
