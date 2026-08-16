@@ -2,13 +2,14 @@ import pytest
 from tests.testconfig import test_redis, test_request
 from api.have_funds import have_funds
 from schemas.schema import OrderReq
-from core.models import Side, Type  # ADDED: Type import
+from core.models import Side, Type 
 from decimal import Decimal
 import uuid
 from api.security import AuthenticatedUser
 from fastapi import HTTPException
 from unittest.mock import patch
 import redis.exceptions as exp
+from core.manager_python import engine_registry
 
 @pytest.mark.asyncio
 async def test_for_invalid_ticker(test_redis, test_request):
