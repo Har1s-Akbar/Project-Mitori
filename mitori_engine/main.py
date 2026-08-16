@@ -99,7 +99,7 @@ async def place_order(
             side = order.side,
             type = order.type,
             price = order.price,
-            number_of_shares = order.shares,
+            number_of_shares = order.number_of_shares,
             order_owner_id = uuid.UUID(current_user.user_id),
             is_canceled=False,
             max_authorized_funds=order.max_authorized_funds

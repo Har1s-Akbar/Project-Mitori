@@ -13,14 +13,17 @@ class PythonMitoriGateway:
         self.PRECISION_MULTIPLIER = Decimal(os.getenv('SYSTEM_PRECISION_MULTIPLIER', '100000000'))
 
     def submit_order(
-        self, 
-        order_id: uuid.UUID, 
-        owner_id: uuid.UUID, 
-        side: Side, 
-        type: Type, 
-        price: Optional[Decimal],
-        number_of_shares: Decimal, 
-        max_authorized_funds: Optional[Decimal] = None
+        self,
+        ticker:str,
+        order_id: uuid.UUID,
+        order_owner_id: uuid.UUID,
+        side:Side,
+        type:Type,
+        date_time:str,
+        is_canceled:bool,
+        number_of_shares: Decimal,
+        price:Optional[Decimal],
+        max_authorized_funds:Optional[Decimal]=None,
     ) -> List:
         
         
@@ -35,9 +38,11 @@ class PythonMitoriGateway:
             type=type,
             price=price_scaled,
             number_of_shares=shares_scaled,
-            order_owner_id=owner_id,
+            order_owner_id=order_owner_id,
             is_canceled=False,
-            max_authorized_funds=funds_scaled
+            max_authorized_funds=funds_scaled,
+            date_time=date_time,
+            is_canceled=is_canceled
         )
 
         executed_trades = self.book.process_order(new_order)
