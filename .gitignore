@@ -38,3 +38,17 @@ Thumbs.db
 
 benchmark/data/*.json
 benchmark/data/*_RAW.csv
+
+# C++ Test Executables
+test_engine.exe
+*.exe
+
+# CMake Build Artifacts (Optimal Solution: Ignore entire folder)
+build/
+.cmake/
+CMakeCache.txt
+CMakeFiles/
+
+# Compiled Python Binaries
+*.pyd
+*.so

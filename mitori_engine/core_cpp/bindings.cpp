@@ -6,7 +6,6 @@
 
 namespace py = pybind11;
 
-const uint64_t PRICE_PRECISION = 100000000;
 
 PYBIND11_MODULE(mitori_engine_cpp, m){
     m.doc() = "Mitori Engine Python Bindings- C++ to python bridge";
@@ -56,8 +55,7 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
                         order->is_canceled = is_canceled;
                         order->price = price;
                         order->number_of_shares = number_of_shares;
-                        
-                        
+                                                
                         if (max_authorized_funds.has_value()) {
                             order->max_authorized_funds = max_authorized_funds.value();
                         } else {
