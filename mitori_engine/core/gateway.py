@@ -16,7 +16,7 @@ import mitori_engine_cpp as engine
 class MitoriGateway:
     def __init__(self, ticker: str):
         self.book = engine.OrderBook(ticker)
-        self.PRICE_PRECISION = Decimal("100000000");
+        self.PRECISION_MULTIPLIER = Decimal("100000000");
         self.ticker = ticker
 
     def _split_uuid(self, uid: uuid.UUID) -> tuple[int, int]:
@@ -40,9 +40,9 @@ class MitoriGateway:
         oid_high, oid_low = self._split_uuid(order_id)
         own_high, own_low = self._split_uuid(owner_id)
 
-        price_scaled = int(price * self.PRICE_PRECISION) if price is not None else None
-        shares_scaled = int(shares * self.PRICE_PRECISION)
-        max_funds_scaled = int(max_funds * self.PRICE_PRECISION) if max_funds is not None  else None
+        price_scaled = int(price * self.PRECISION_MULTIPLIER) if price is not None else 0
+        shares_scaled = int(shares * self.PRECISION_MULTIPLIER)
+        max_funds_scaled = int(max_funds * self.PRECISION_MULTIPLIER) if max_funds is not None  else None
 
         raw_trades = self.book.process_order(
             order_id_high=oid_high,

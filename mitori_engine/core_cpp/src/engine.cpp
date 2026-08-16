@@ -64,23 +64,26 @@ std::vector<Trade> OrderBook::match_buy(Order* buy_order){
     
     while(!asks.empty() && buy_order->number_of_shares > 0){
         Order* best_ask = asks.top();
-        
         if(best_ask->is_canceled){
             asks.pop();
             unsigned __int128 best_ask_id = metadata_vault[best_ask->metadata_index].order_id;
             canceled_orders.erase(best_ask_id);
             continue;
         }
-        
         if(buy_order->type == Type::LIMIT && buy_order->price < best_ask->price){
             break;
         }
-
         uint64_t trade_quantity = std::min(buy_order->number_of_shares, best_ask->number_of_shares);
         uint64_t trade_price = best_ask->price;
 
-        if(buy_order->type == Type::LIMIT){
-            if(buy_order->date_time < best_ask->date_time){
+        if (trade_price == 0) {
+            if (buy_order->type == Type::LIMIT) {
+                trade_price = buy_order->price; 
+            } else {
+                break;
+            }
+        } else if (buy_order->type == Type::LIMIT) {
+            if(buy_order->date_time < best_ask->date_time) {
                 trade_price = buy_order->price;
             }
         }
@@ -93,8 +96,19 @@ std::vector<Trade> OrderBook::match_buy(Order* buy_order){
                 total_cost += 1;
             }
 
-            if(total_spent + total_cost > buy_order->max_authorized_funds){
-                break;
+            if(total_spent + total_cost > buy_order->max_authorized_funds) {
+                uint64_t remaining_funds = buy_order->max_authorized_funds - total_spent;
+
+                unsigned __int128 affordable_shares = ((unsigned __int128)remaining_funds * PRICE_PRECISION) / trade_price;
+                trade_quantity = static_cast<uint64_t>(affordable_shares);
+                
+                if (trade_quantity == 0) {
+                    break;
+                }
+                
+                scaled_cost = (unsigned __int128)trade_quantity * (unsigned __int128)trade_price;
+                total_cost = static_cast<uint64_t>(scaled_cost / PRICE_PRECISION);
+                if(total_cost % PRICE_PRECISION != 0) total_cost += 1;
             }
             total_spent += total_cost;
         }
@@ -142,12 +156,17 @@ std::vector<Trade> OrderBook::match_sell(Order* sell_order) {
         uint64_t trade_shares = std::min(sell_order->number_of_shares, best_bid->number_of_shares);
         uint64_t trade_price = best_bid->price; 
 
-        if (sell_order->type == Type::LIMIT) {
+        if (trade_price == UINT64_MAX) {
+            if (sell_order->type == Type::LIMIT) {
+                trade_price = sell_order->price;
+            } else {
+                break;
+            }
+        } else if (sell_order->type == Type::LIMIT) {
             if (sell_order->date_time < best_bid->date_time) {
                 trade_price = sell_order->price;
             }
         }
-
         sell_order->number_of_shares -= trade_shares;
         best_bid->number_of_shares -= trade_shares;
 
