@@ -1,4 +1,4 @@
-from core.gateway import MitoriGateway
+from mitori_engine.core.gateway_cpp import MitoriGateway
 from core.config import ALLOWED_TICKERS
 
 class EngineManager:
