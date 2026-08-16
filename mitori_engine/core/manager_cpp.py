@@ -21,4 +21,4 @@ class EngineManager:
             gateway.reset_engine()
 
 SUPPORTED_TICKERS = {"AAPL", "TSLA", "MSFT", "GOOGL"}
-engine_registry = EngineManager(allowed_tickers=SUPPORTED_TICKERS)
+engine_registry = EngineManager(supported_tickers=SUPPORTED_TICKERS)
