@@ -43,12 +43,15 @@ services:
       - POSTGRES_HOST=${DATABASE_HOST}
       - POSTGRES_PORT=5432
       - REDIS_URL=redis://redis:6379/0 
+      
+      - PYTHONPATH=/app/core_cpp/build
     depends_on:
       redis:
         condition: service_healthy
     volumes:
       - ./mitori_engine:/app
-
+    command: >
+      bash -c "cd core_cpp && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j 2 && cd .. && uvicorn main:app --host 0.0.0.0 --port 8000"
   mitori_backend:
     build:
       context: ./mitori_backend
