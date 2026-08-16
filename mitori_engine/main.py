@@ -5,9 +5,12 @@ import uuid
 import uvicorn
 import redis.asyncio as redis
 from infrastructure.client import create_redis_pool
-from api.security import AuthenticatedUser, is_user_Authenticated
+from api.security import AuthenticatedUser
 from api.check_ownership import check_owner_ship
+
 from api.dependencies import get_redis, get_matching_engine
+from core.interfaces import EngineProtocol
+
 import json
 import dataclasses
 from api.have_funds import have_funds
@@ -19,7 +22,8 @@ from decimal import Decimal
 from logger import configure_fastapi_logging
 import structlog
 import time
-from core.gateway import MitoriGateway
+# from core.gateway import MitoriGateway
+
 
 load_dotenv()
 
@@ -78,28 +82,37 @@ async def logging_middleware(request: Request, call_next):
 @app.post("/order")
 async def place_order(
     order: OrderReq,
-    # engine : MitoriGateway = Depends(get_matching_engine),
+    engine : EngineProtocol = Depends(get_matching_engine),
     redis_client: redis.Redis = Depends(get_redis),
     current_user: AuthenticatedUser = Depends(have_funds)
 ):
-    target_book = MARKET[order.ticker]
-    multiplier = Decimal(os.getenv('SYSTEM_PRECISION_MULTIPLIER', '100000000'))
+    # target_book = MARKET[order.ticker]
+    # multiplier = Decimal(os.getenv('SYSTEM_PRECISION_MULTIPLIER', '100000000'))
 
-    price_scaled_up = int(Decimal(str(order.price)) * multiplier) if order.price else None
-    shares_scaled_up = int(Decimal(str(order.number_of_shares)) * multiplier)
+    # price_scaled_up = int(Decimal(str(order.price)) * multiplier) if order.price else None
+    # shares_scaled_up = int(Decimal(str(order.number_of_shares)) * multiplier)
 
-    new_order = Order(
-        ticker = order.ticker,
-        side = order.side,
-        type = order.type,
-        price = price_scaled_up if price_scaled_up else 0,
-        number_of_shares = shares_scaled_up,
-        order_owner_id = uuid.UUID(current_user.user_id),
-        is_canceled=False,
-        max_authorized_funds=order.max_authorized_funds 
-    )
-
-    executed_trades = target_book.process_order(new_order)
+    executed_trades = engine.submit_order(
+            ticker = order.ticker,
+            side = order.side,
+            type = order.type,
+            price = order.price,
+            number_of_shares = order.shares,
+            order_owner_id = uuid.UUID(current_user.user_id),
+            is_canceled=False,
+            max_authorized_funds=order.max_authorized_funds
+        )
+    
+    # new_order = Order(
+    #     ticker = order.ticker,
+    #     side = order.side,
+    #     type = order.type,
+    #     price = price_scaled_up if price_scaled_up else 0,
+    #     number_of_shares = shares_scaled_up,
+    #     order_owner_id = uuid.UUID(current_user.user_id),
+    #     is_canceled=False,
+    #     max_authorized_funds=order.max_authorized_funds
+    # )
 
     if executed_trades:
         current_context = structlog.contextvars.get_contextvars()
@@ -121,16 +134,16 @@ async def place_order(
                     approximate=True
                 )
                 
-            current_bbo = target_book.get_current_bbo()
-            pipe.hset(f'ticker:{new_order.ticker}:bbo', mapping=current_bbo)
+            current_bbo = engine.get_current_bbo()
+            pipe.hset(f'ticker:{order.ticker}:bbo', mapping=current_bbo)
             
             await pipe.execute()
             
-        logger.info("trades_pushed_to_stream", order_id=new_order.order_id, ticker=new_order.ticker, trade_count=len(executed_trades))
+        logger.info("trades_pushed_to_stream", order_id=order.order_id, ticker=order.ticker, trade_count=len(executed_trades))
         
     return {
         "message": "Order Accepted",
-        "order_id": new_order.order_id,
+        "order_id": order.order_id,
         "trades": executed_trades
     }
 
@@ -138,20 +151,15 @@ async def place_order(
 async def delete_order(
     order_id: str, 
     ticker: str,
+    engine : EngineProtocol = Depends(get_matching_engine),
     redis_client: redis.Redis = Depends(get_redis), 
     current_user: AuthenticatedUser = Depends(check_owner_ship)
 ):
-    multiplier = Decimal(os.getenv('SYSTEM_PRECISION_MULTIPLIER', '10000'))
-    market = MARKET.get(ticker, None)
     
-    if not market:
-        raise HTTPException(status_code=404, detail="Market does not exist")
-        
-    order_canceled = market.tombstone_delete(order_id)
+    order_canceled = engine.cancel_order(uuid.UUID(order_id))
 
     if not order_canceled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order does not exist")
-
     current_context = structlog.contextvars.get_contextvars()
     correlation_id = current_context.get("correlation_id", "fallback_id")
     user_id = str(order_canceled.order_owner_id)
@@ -166,12 +174,15 @@ async def delete_order(
         }
         
         if order_canceled.side == Side.SELL:
-            number_of_shares_safe = int(order_canceled.number_of_shares)
+            # Shares are already an integer
+            number_of_shares_safe = order_canceled.number_of_shares
             pipeline.hincrby(f'cache:positions:{user_id}', ticker, number_of_shares_safe)
             pipeline.hincrby(f'cache:positions:{user_id}', f'locked_{ticker}', -number_of_shares_safe)
             
         elif order_canceled.side == Side.BUY:
-            total_price = int(order_canceled.price * order_canceled.number_of_shares / multiplier)
+            # 🚨 NEW FAST INTEGER MATH: (10^8 * 10^8) // 10^8 = 10^8 scaled cash
+            total_price = (order_canceled.price * order_canceled.number_of_shares) // 100000000
+            
             pipeline.hincrby(f'cache:portfolio:{user_id}', 'available_cash', total_price)
             pipeline.hincrby(f'cache:portfolio:{user_id}', 'locked_balance', -total_price)
 
@@ -184,7 +195,7 @@ async def delete_order(
             
         await pipeline.execute()
         
-    logger.info("cancelled_trade_pushed_to_stream", order_id=order_id, ticker=order_canceled.ticker)
+    logger.info("cancelled_trade_pushed_to_stream", order_id=order_id, ticker=ticker)
     
     return {
         "message": f'Order with id {order_id} was cancelled and funds are returned',

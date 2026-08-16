@@ -61,9 +61,9 @@ class MitoriGateway:
         for t in raw_trades:
             trade_object = Trade(
                 ticker= t.ticker,
-                quantity= self._to_decimal(t.quantity),
-                price_setteled_at= self._to_decimal(t.price_setteled_at),
-                price_locked_by_user= self._to_decimal(t.price_locked_by_user),
+                quantity= t.quantity,
+                price_setteled_at= t.price_setteled_at,
+                price_locked_by_user= t.price_locked_by_user,
                 buyer_id= self._merge_uuid(t.buyer_id_high, t.buyer_id_low),
                 seller_id= self._merge_uuid(t.seller_id_high, t.seller_id_low)
             )
@@ -87,9 +87,9 @@ class MitoriGateway:
             ticker=self.ticker,
             side=canceled_data["side"],
             type=canceled_data["type"],
-            # Apply exact Decimal reconstruction 
-            price=self._to_decimal(canceled_data["price"]),
-            number_of_shares=self._to_decimal(canceled_data["number_of_shares"]),
+
+            price=canceled_data["price"],
+            number_of_shares=canceled_data["number_of_shares"],
             order_owner_id=self._merge_uuid(
                 canceled_data["owner_id_high"], 
                 canceled_data["owner_id_low"]
