@@ -1,0 +1,1 @@
+ALLOWED_TICKERS = {"AAP", "GOOGL", "AMD", "TSLA", "AUX"}

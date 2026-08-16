@@ -56,8 +56,6 @@ class MitoriGateway:
             number_of_shares=shares_scaled,
             max_authorized_funds=max_funds_scaled
         )
-        
-        execution_timestamp = time.time_ns() 
 
         processed_trades = []
         for t in raw_trades:

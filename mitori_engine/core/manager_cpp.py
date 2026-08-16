@@ -1,11 +1,12 @@
 from core.gateway import MitoriGateway
+from core.config import ALLOWED_TICKERS
 
 class EngineManager:
-    def __init__(self, supported_tickers: set[str]):
+    def __init__(self, allowed_tickers: set[str]):
         self._gateways: dict[str, MitoriGateway] = {
-            ticker: MitoriGateway(ticker=ticker) for ticker in supported_tickers
+            ticker: MitoriGateway(ticker=ticker) for ticker in allowed_tickers
         }
-        self._allowed_tickers : set[str] = {ticker.upper() for ticker in supported_tickers}
+        self._allowed_tickers : set[str] = {ticker.upper() for ticker in allowed_tickers}
 
     def get_gateway(self, ticker: str) -> MitoriGateway:
         normalized_ticker = ticker.upper()
@@ -20,5 +21,4 @@ class EngineManager:
         for gateway in self._gateways.values():
             gateway.reset_engine()
 
-SUPPORTED_TICKERS = {"AAPL", "TSLA", "MSFT", "GOOGL"}
-engine_registry = EngineManager(supported_tickers=SUPPORTED_TICKERS)
+engine_registry = EngineManager(allowed_tickers=ALLOWED_TICKERS)
