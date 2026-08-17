@@ -387,16 +387,8 @@ async def test_market_order_end_to_end_route(
     )
     
     assert res_buyer.status_code == 200, f"Market Order API Route Failed: {res_buyer.text}"
-
-    getting_stream = []
-    for _ in range(10):
-        getting_stream = await test_redis.xread({"executed_trades_stream": "0-0"})
-        if getting_stream:
-            break
-        await asyncio.sleep(0.05)
-
-    assert getting_stream, "No executed trades stream found in Redis after timeout"
-    _, message_list = getting_stream[0]
+    
+    await asyncio.sleep(0.2)
     
     getting_stream = await test_redis.xread({"executed_trades_stream": "0-0"})
     _, message_list = getting_stream[0]
