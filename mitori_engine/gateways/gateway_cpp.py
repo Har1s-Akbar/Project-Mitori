@@ -3,7 +3,7 @@ from pathlib import Path
 import time
 import uuid
 from decimal import Decimal
-from core.models import Trade, Order
+from core_python.models import Trade, Order, Side,Type
 from typing import Optional
 
 BUILD_DIR = Path(__file__).resolve().parent.parent / "core_cpp" / "build"
@@ -31,8 +31,10 @@ class MitoriGateway:
         return uuid.UUID(int=(high << 64) | low)
 
     def _to_decimal(self, raw_val: int) -> Decimal:
-        return Decimal(raw_val) / self.PRECISION_MULTIPLIER
-
+        if raw_val:
+            return Decimal(raw_val) / self.PRECISION_MULTIPLIER
+        else:
+            return Decimal(0)
     def submit_order(self, order_id: uuid.UUID, owner_id: uuid.UUID, 
                      side: engine.Side, type: engine.Type, price: Optional[Decimal],
                      shares: Decimal, max_funds: Optional[Decimal] = None):
@@ -85,8 +87,8 @@ class MitoriGateway:
         return Order(
             order_id=order_id,
             ticker=self.ticker,
-            side=canceled_data["side"],
-            type=canceled_data["type"],
+            side= Side.SELL if canceled_data["side"]==1 else Side.BUY,
+            type= Type.MARKET if canceled_data['type'] == 1 else Type.LIMIT,
 
             price=canceled_data["price"],
             number_of_shares=canceled_data["number_of_shares"],
@@ -101,8 +103,8 @@ class MitoriGateway:
         raw_bbo = self.book.get_current_bbo()
 
         return {
-            "best_ask_price" : self._to_decimal(raw_bbo.get("best_ask_price"),int(0)),
-            "best_bid_price":self._to_decimal(raw_bbo.get("best_bid_price"), int(0))
+            "best_ask_price" : self._to_decimal(raw_bbo.get("best_ask_price")),
+            "best_bid_price":self._to_decimal(raw_bbo.get("best_bid_price"))
         }
         
     def reset_engine(self):

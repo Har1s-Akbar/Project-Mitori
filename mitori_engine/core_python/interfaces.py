@@ -1,6 +1,6 @@
 from typing import Protocol, List, Optional
 import uuid
-from core.models import Side, Type, Order
+from core_python.models import Side, Type, Order
 from decimal import Decimal
 
 class EngineProtocol(Protocol):
@@ -16,9 +16,10 @@ class EngineProtocol(Protocol):
         price:Optional[Decimal],
         max_authorized_funds:Optional[Decimal]=None,
     )->List:
+    
         ...
 
     def cancel_order(self, order_id: uuid.UUID)->Optional[Order]:
         ...
-    def get_bbo()->dict:
+    def get_bbo(self)->dict:
         ...

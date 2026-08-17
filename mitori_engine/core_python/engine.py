@@ -1,7 +1,7 @@
 import heapq
 from .models import Order, Trade, Side, Type
-from decimal import Decimal
 from uuid import UUID
+import os
 
 class OrderBook():
     ticker: str
@@ -12,6 +12,7 @@ class OrderBook():
         self.ticker = ticker
         self.active_uuids = {}
         self.canceled_uuids = set()
+        self.PRECISION_MULTIPLIER = int(os.getenv('SYSTEM_PRECISION_MULTIPLIER', '100000000'))
 
     def process_order(self, order: Order) -> list[Trade]:
         if order.type == Type.LIMIT.value: 
@@ -25,7 +26,7 @@ class OrderBook():
         executed_trades = []
         target_side = self.ask if order.side == Side.BUY else self.bid
         
-        total_spent = Decimal("0.00")
+        total_spent = 0
 
         while target_side and order.number_of_shares > 0:
             best_resting = target_side[0][3]
@@ -40,7 +41,9 @@ class OrderBook():
             settled_price = best_resting.price
 
             if order.side == Side.BUY:
-                trade_cost = Decimal(transactioning_shares) * settled_price
+                trade_cost_scaled = transactioning_shares * settled_price
+                trade_cost = trade_cost_scaled // self.PRECISION_MULTIPLIER
+                
                 if order.max_authorized_funds is not None and (total_spent + trade_cost) > order.max_authorized_funds:
                     break
                 total_spent += trade_cost
@@ -148,7 +151,7 @@ class OrderBook():
         while self.ask:
             top_ask = self.ask[0][3]
             if str(top_ask.order_id) not in self.canceled_uuids:
-                best_ask = str(top_ask.price)
+                best_ask = top_ask.price
                 break
             else:
                 heapq.heappop(self.ask)
@@ -157,7 +160,7 @@ class OrderBook():
         while self.bid:
             top_bid = self.bid[0][3]
             if str(top_bid.order_id) not in self.canceled_uuids:
-                best_bid = str(top_bid.price)
+                best_bid = top_bid.price
                 break
             else:
                 heapq.heappop(self.bid)

@@ -1,9 +1,9 @@
 from fastapi import Request, Depends, HTTPException, status
 from api.security import AuthenticatedUser, is_user_Authenticated
 from uuid import UUID
-from core.config import ALLOWED_TICKERS
+from core_python.config import ALLOWED_TICKERS
 from api.dependencies import get_matching_engine
-from core.interfaces import EngineProtocol
+from core_python.interfaces import EngineProtocol
 
 def check_owner_ship(order_id:str, ticker:str, user:AuthenticatedUser=Depends(is_user_Authenticated), engine:EngineProtocol= Depends(get_matching_engine)) -> AuthenticatedUser:
     try:

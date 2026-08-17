@@ -3,7 +3,7 @@ from decimal import Decimal
 import json
 from tests.testconfig import test_redis, test_request, order_factory, token_factory, seed_cash_factory, seed_shares_factory, async_client
 import uuid
-from core.models import Side, Type
+from core_python.models import Side, Type
 import asyncio
 import os
 

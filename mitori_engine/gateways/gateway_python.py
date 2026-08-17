@@ -3,8 +3,8 @@ import os
 from typing import List, Optional
 from decimal import Decimal
 
-from core.models import Order , Side, Type
-from core.engine import OrderBook
+from core_python.models import Order , Side, Type
+from core_python.engine import OrderBook
 
 class PythonMitoriGateway:
     def __init__(self, ticker: str):

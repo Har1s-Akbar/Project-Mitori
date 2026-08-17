@@ -1,9 +1,9 @@
 import os
-from core.interfaces import EngineProtocol
+from core_python.interfaces import EngineProtocol
 from fastapi import Request, HTTPException
 import redis.asyncio as redis
-from core.manager_cpp import engine_registry as cpp_registry
-from core.manager_python import engine_registry as python_registry
+from managers.manager_cpp import engine_registry as cpp_registry
+from managers.manager_python import engine_registry as python_registry
 
 from dotenv import load_dotenv
 
