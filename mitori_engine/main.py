@@ -9,20 +9,18 @@ from api.security import AuthenticatedUser
 from api.check_ownership import check_owner_ship
 
 from api.dependencies import get_redis, get_matching_engine
-from core.interfaces import EngineProtocol
+from core_python.interfaces import EngineProtocol
 
 import json
 import dataclasses
 from api.have_funds import have_funds
 from schemas.schema import MARKET, OrderReq
-from core.models import Order, Side
-import os
+from core_python.models import Order, Side
+
 from dotenv import load_dotenv
-from decimal import Decimal
 from logger import configure_fastapi_logging
 import structlog
 import time
-# from core.gateway import MitoriGateway
 
 
 load_dotenv()
@@ -86,11 +84,6 @@ async def place_order(
     redis_client: redis.Redis = Depends(get_redis),
     current_user: AuthenticatedUser = Depends(have_funds)
 ):
-    # target_book = MARKET[order.ticker]
-    # multiplier = Decimal(os.getenv('SYSTEM_PRECISION_MULTIPLIER', '100000000'))
-
-    # price_scaled_up = int(Decimal(str(order.price)) * multiplier) if order.price else None
-    # shares_scaled_up = int(Decimal(str(order.number_of_shares)) * multiplier)
     
     ticker = order.ticker
     engine = get_matching_engine(ticker=ticker)
@@ -108,17 +101,6 @@ async def place_order(
             max_authorized_funds=order.max_authorized_funds
         )
     
-    # new_order = Order(
-    #     ticker = order.ticker,
-    #     side = order.side,
-    #     type = order.type,
-    #     price = price_scaled_up if price_scaled_up else 0,
-    #     number_of_shares = shares_scaled_up,
-    #     order_owner_id = uuid.UUID(current_user.user_id),
-    #     is_canceled=False,
-    #     max_authorized_funds=order.max_authorized_funds
-    # )
-
     if executed_trades:
         current_context = structlog.contextvars.get_contextvars()
         correlation_id = current_context.get("correlation_id", "fallback_id")
@@ -179,13 +161,11 @@ async def delete_order(
         }
         
         if order_canceled.side == Side.SELL:
-            # Shares are already an integer
             number_of_shares_safe = order_canceled.number_of_shares
             pipeline.hincrby(f'cache:positions:{user_id}', ticker, number_of_shares_safe)
             pipeline.hincrby(f'cache:positions:{user_id}', f'locked_{ticker}', -number_of_shares_safe)
             
         elif order_canceled.side == Side.BUY:
-            # 🚨 NEW FAST INTEGER MATH: (10^8 * 10^8) // 10^8 = 10^8 scaled cash
             total_price = (order_canceled.price * order_canceled.number_of_shares) // 100000000
             
             pipeline.hincrby(f'cache:portfolio:{user_id}', 'available_cash', total_price)

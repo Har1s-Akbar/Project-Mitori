@@ -1,6 +1,6 @@
 from __future__ import annotations
-from core.models import Side, Type
-from core.engine import OrderBook
+from core_python.models import Side, Type
+from core_python.engine import OrderBook
 from typing import Optional
 import uuid
 from pydantic import BaseModel,Field, model_validator

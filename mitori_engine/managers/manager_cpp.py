@@ -1,5 +1,5 @@
-from core.gateway_cpp import MitoriGateway
-from core.config import ALLOWED_TICKERS
+from gateways.gateway_cpp import MitoriGateway
+from core_python.config import ALLOWED_TICKERS
 
 class EngineManager:
     def __init__(self, allowed_tickers: set[str]):

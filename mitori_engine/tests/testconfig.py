@@ -15,7 +15,7 @@ from httpx import AsyncClient, ASGITransport
 
 from main import app
 from schemas.schema import OrderReq
-from core.models import Side, Type 
+from core_python.models import Side, Type 
 
 load_dotenv()
 

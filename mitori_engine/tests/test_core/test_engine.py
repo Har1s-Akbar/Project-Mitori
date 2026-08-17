@@ -1,21 +1,29 @@
-from core.engine import OrderBook
-from core.models import Side, Type, Order, Trade
+from core_python.engine import OrderBook
+from core_python.models import Side, Type, Order, Trade
 from decimal import Decimal
 from uuid import uuid4
 import time
+import os
+
+MULTIPLIER = int(os.getenv('SYSTEM_PRECISION_MULTIPLIER', '100000000'))
 
 def create_order(side, shares, price, ticker, order_type=Type.LIMIT, max_funds=None):
     time.sleep(0.001)
     
+    # Simulate the API Gateway scaling the payloads BEFORE hitting the engine
+    scaled_price = int(Decimal(str(price)) * MULTIPLIER) if price else None
+    scaled_shares = int(Decimal(str(shares)) * MULTIPLIER)
+    scaled_funds = int(Decimal(str(max_funds)) * MULTIPLIER) if max_funds else None
+
     return Order(
         ticker=ticker,
         type=order_type,
-        price=Decimal(price) if price else None,
-        number_of_shares=Decimal(shares),
+        price=scaled_price,
+        number_of_shares=scaled_shares,
         side=side,
         order_owner_id=uuid4(),
         is_canceled=False,
-        max_authorized_funds=Decimal(max_funds) if max_funds else None
+        max_authorized_funds=scaled_funds
     )
 
 def test_match_order_same_price():
@@ -28,7 +36,7 @@ def test_match_order_same_price():
     trade = book.process_order(sellSide)
 
     assert len(trade) == 1
-    assert trade[0].quantity == 200
+    assert trade[0].quantity == 200 * MULTIPLIER
     assert trade[0].buyer_id != trade[0].seller_id
     assert trade[0].price_locked_by_user == trade[0].price_setteled_at 
     assert trade[0].ticker == 'APP'
@@ -42,7 +50,7 @@ def test_order_partial_fill():
     trade = book.process_order(sellSide)
 
     assert len(trade) == 1
-    assert trade[0].quantity == 20
+    assert trade[0].quantity == 20 * MULTIPLIER
     assert trade[0].buyer_id != trade[0].seller_id
     assert trade[0].price_locked_by_user == trade[0].price_setteled_at
     assert trade[0].ticker == 'APP'
@@ -66,7 +74,7 @@ def test_best_bid_match():
     trade = book.process_order(sellSide)
 
     assert len(trade) == 1
-    assert trade[0].price_setteled_at == Decimal('15')
+    assert trade[0].price_setteled_at == 15 * MULTIPLIER
 
 def test_best_bid_partial_fill():
     book = OrderBook('APP')
@@ -77,15 +85,15 @@ def test_best_bid_partial_fill():
     trade = book.process_order(sellSide)
 
     assert len(trade) == 1
-    assert trade[0].quantity == 20
-    assert trade[0].price_setteled_at == Decimal('15')
+    assert trade[0].quantity == 20 * MULTIPLIER
+    assert trade[0].price_setteled_at == 15 * MULTIPLIER
     
     assert len(book.bid) == 1 
     assert len(book.ask) == 0
     
-    assert book.bid[0][3].number_of_shares == 20
-    assert book.bid[0][3].price == Decimal('15')
-    assert book.bid[0][0] == Decimal('-15')
+    assert book.bid[0][3].number_of_shares == 20 * MULTIPLIER
+    assert book.bid[0][3].price == 15 * MULTIPLIER
+    assert book.bid[0][0] == -15 * MULTIPLIER
 
 def test_tombstone_cancel():
     book = OrderBook('APP')
@@ -119,7 +127,6 @@ def test_price_time_priority():
     assert (book.ask[0][1] < book.ask[1][1]) and (book.ask[1][1] < book.ask[2][1]) and (book.ask[2][1] < book.ask[3][1])
 
     trades1 = book.process_order(buySide1)
-
     trades2 = book.process_order(buySide2)
 
     assert len(trades1) == 1
@@ -152,11 +159,11 @@ def test_market_order_financial_ceiling():
     trades = book.process_order(market_buy)
         
     assert len(trades) == 1
-    assert trades[0].quantity == Decimal("10")
-    assert trades[0].price_setteled_at == Decimal("10")
+    assert trades[0].quantity == 10 * MULTIPLIER
+    assert trades[0].price_setteled_at == 10 * MULTIPLIER
     
     assert len(book.ask) == 1
-    assert book.ask[0][3].price == Decimal("15")
+    assert book.ask[0][3].price == 15 * MULTIPLIER
 
 def test_get_current_bbo():
     book = OrderBook('APP')
@@ -166,5 +173,5 @@ def test_get_current_bbo():
     
     bbo = book.get_current_bbo()
     
-    assert bbo["best_bid_price"] == "99.50"
-    assert bbo["best_ask_price"] == "100.50"
+    assert bbo["best_bid_price"] == int(Decimal("99.50") * MULTIPLIER)
+    assert bbo["best_ask_price"] == int(Decimal("100.50") * MULTIPLIER)

@@ -1,7 +1,7 @@
 from fastapi import HTTPException, status, Request, Depends
 from api.security import is_user_Authenticated, AuthenticatedUser
 from schemas.schema import OrderReq
-from core.models import Type, Side
+from core_python.models import Type, Side
 from decimal import Decimal
 import redis.exceptions as exp
 from schemas.schema import MARKET
@@ -10,7 +10,7 @@ import os
 from dotenv import load_dotenv
 from utility.have_funds_utility import redis_get_buyer_portfolio, redis_get_seller_positions
 load_dotenv()
-from core.config import ALLOWED_TICKERS
+from core_python.config import ALLOWED_TICKERS
 
 async def have_funds(request: Request, user: AuthenticatedUser = Depends(is_user_Authenticated), order: OrderReq = None) -> AsyncGenerator[AuthenticatedUser, None]:
     

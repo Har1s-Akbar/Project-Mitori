@@ -1,6 +1,6 @@
 from typing import Dict
-from core.config import ALLOWED_TICKERS
-from core.gateway_python import PythonMitoriGateway
+from core_python.config import ALLOWED_TICKERS
+from gateways.gateway_python import PythonMitoriGateway
 
 class PythonEngineRegistry:
     def __init__(self, allowed_ticker:set[str]):
@@ -8,9 +8,10 @@ class PythonEngineRegistry:
             ticker: PythonMitoriGateway(ticker=ticker) for ticker in allowed_ticker
         }
     def get_engine(self, ticker: str) -> PythonMitoriGateway:
-        if ticker not in ALLOWED_TICKERS:
+        normalized_ticker = ticker.upper()
+        if normalized_ticker not in ALLOWED_TICKERS:
             raise KeyError(f"Not supported ticker: {ticker}")
-        if ticker not in self._engines:
+        if normalized_ticker not in self._engines:
             self._engines[ticker] = PythonMitoriGateway(ticker)
             
         return self._engines[ticker]
