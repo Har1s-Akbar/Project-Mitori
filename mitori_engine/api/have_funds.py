@@ -43,7 +43,7 @@ async def have_funds(request: Request, user: AuthenticatedUser = Depends(is_user
                         if user_data['BBO_ask_price'] is None:
                             raise HTTPException(status_code=status.HTTP_406_NOT_ACCEPTABLE, detail="Market does not have enough liquidity")
                         
-                        total = (Decimal(user_data['BBO_ask_price']) * order_quantity * Decimal("1.01"))
+                        total = int(Decimal(user_data['BBO_ask_price']) * order_quantity * Decimal("1.01"))
                         
                         
                     elif order_type == Type.LIMIT:

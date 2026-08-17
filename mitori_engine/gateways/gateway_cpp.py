@@ -35,16 +35,16 @@ class MitoriGateway:
             return Decimal(raw_val) / self.PRECISION_MULTIPLIER
         else:
             return Decimal(0)
-    def submit_order(self, order_id: uuid.UUID, owner_id: uuid.UUID, 
-                     side: engine.Side, type: engine.Type, price: Optional[Decimal],
-                     shares: Decimal, max_funds: Optional[Decimal] = None):
+    def submit_order(self, ticker:str ,order_id: uuid.UUID, order_owner_id: uuid.UUID,
+                     side: engine.Side, type: engine.Type,is_canceled:bool,
+                     number_of_shares: Decimal, price: Optional[Decimal],max_authorized_funds: Optional[Decimal] = None):
         
         oid_high, oid_low = self._split_uuid(order_id)
-        own_high, own_low = self._split_uuid(owner_id)
+        own_high, own_low = self._split_uuid(order_owner_id)
 
         price_scaled = int(price * self.PRECISION_MULTIPLIER) if price is not None else 0
-        shares_scaled = int(shares * self.PRECISION_MULTIPLIER)
-        max_funds_scaled = int(max_funds * self.PRECISION_MULTIPLIER) if max_funds is not None  else None
+        shares_scaled = int(number_of_shares * self.PRECISION_MULTIPLIER)
+        max_funds_scaled = int(max_authorized_funds * self.PRECISION_MULTIPLIER) if max_authorized_funds is not None  else None
 
         raw_trades = self.book.process_order(
             order_id_high=oid_high,
