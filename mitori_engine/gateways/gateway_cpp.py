@@ -44,7 +44,7 @@ class MitoriGateway:
 
         price_scaled = int(price * self.PRECISION_MULTIPLIER) if price is not None else 0
         shares_scaled = int(number_of_shares * self.PRECISION_MULTIPLIER)
-        max_funds_scaled = int(max_authorized_funds * self.PRECISION_MULTIPLIER) if max_authorized_funds is not None  else None
+        max_funds_scaled = int(max_authorized_funds * self.PRECISION_MULTIPLIER) if max_authorized_funds is not None  else 0
 
         raw_trades = self.book.process_order(
             order_id_high=oid_high,
