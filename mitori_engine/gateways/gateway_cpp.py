@@ -18,6 +18,8 @@ class MitoriGateway:
         self.book = engine.OrderBook(ticker)
         self.PRECISION_MULTIPLIER = Decimal("100000000");
         self.ticker = ticker
+        self.SIDE_TO_INT = {"buy": 0, "sell": 1}
+        self.TYPE_TO_INT = {"limit": 0, "market": 1}
 
     def _split_uuid(self, uid: uuid.UUID) -> tuple[int, int]:
         if uid is None:
@@ -36,7 +38,7 @@ class MitoriGateway:
         else:
             return Decimal(0)
     def submit_order(self, ticker:str ,order_id: uuid.UUID, order_owner_id: uuid.UUID,
-                     side: engine.Side, type: engine.Type,is_canceled:bool,
+                     side: Side, type: Type,is_canceled:bool,
                      number_of_shares: Decimal, price: Optional[Decimal],max_authorized_funds: Optional[Decimal] = None):
         
         oid_high, oid_low = self._split_uuid(order_id)
@@ -51,8 +53,8 @@ class MitoriGateway:
             order_id_low=oid_low,
             order_owner_id_high=own_high,
             order_owner_id_low=own_low,
-            side=side,
-            type=type,
+            side=self.SIDE_TO_INT[side.value],
+            type=self.TYPE_TO_INT[type.value],
             is_canceled=False,
             price=price_scaled,
             number_of_shares=shares_scaled,
