@@ -18,7 +18,7 @@ class MitoriGateway:
         self.book = engine.OrderBook(ticker)
         self.PRECISION_MULTIPLIER = Decimal("100000000");
         self.ticker = ticker
-
+        
     def _split_uuid(self, uid: uuid.UUID) -> tuple[int, int]:
         if uid is None:
             return (0, 0)
@@ -30,29 +30,24 @@ class MitoriGateway:
     def _merge_uuid(self, high: int, low: int) -> uuid.UUID:
         return uuid.UUID(int=(high << 64) | low)
 
-    def _to_decimal(self, raw_val: int) -> Decimal:
-        if raw_val:
-            return Decimal(raw_val) / self.PRECISION_MULTIPLIER
-        else:
-            return Decimal(0)
-    def submit_order(self, order_id: uuid.UUID, owner_id: uuid.UUID, 
-                     side: engine.Side, type: engine.Type, price: Optional[Decimal],
-                     shares: Decimal, max_funds: Optional[Decimal] = None):
+    def submit_order(self, ticker:str ,order_id: uuid.UUID, order_owner_id: uuid.UUID,
+                     side: Side, type: Type,is_canceled:bool,
+                     number_of_shares: Decimal, price: Optional[Decimal],max_authorized_funds: Optional[Decimal] = None):
         
         oid_high, oid_low = self._split_uuid(order_id)
-        own_high, own_low = self._split_uuid(owner_id)
+        own_high, own_low = self._split_uuid(order_owner_id)
 
         price_scaled = int(price * self.PRECISION_MULTIPLIER) if price is not None else 0
-        shares_scaled = int(shares * self.PRECISION_MULTIPLIER)
-        max_funds_scaled = int(max_funds * self.PRECISION_MULTIPLIER) if max_funds is not None  else None
+        shares_scaled = int(number_of_shares * self.PRECISION_MULTIPLIER)
+        max_funds_scaled = int(max_authorized_funds * self.PRECISION_MULTIPLIER) if max_authorized_funds is not None  else None
 
         raw_trades = self.book.process_order(
             order_id_high=oid_high,
             order_id_low=oid_low,
             order_owner_id_high=own_high,
             order_owner_id_low=own_low,
-            side=side,
-            type=type,
+            side=engine.Side.BUY if side.value == "buy" else engine.Side.SELL,
+            type=engine.Type.LIMIT if type.value == "limit" else engine.Type.MARKET,
             is_canceled=False,
             price=price_scaled,
             number_of_shares=shares_scaled,
@@ -103,8 +98,8 @@ class MitoriGateway:
         raw_bbo = self.book.get_current_bbo()
 
         return {
-            "best_ask_price" : self._to_decimal(raw_bbo.get("best_ask_price")),
-            "best_bid_price":self._to_decimal(raw_bbo.get("best_bid_price"))
+            "best_ask_price" : int(raw_bbo.get("best_ask_price")),
+            "best_bid_price":int(raw_bbo.get("best_bid_price"))
         }
         
     def reset_engine(self):

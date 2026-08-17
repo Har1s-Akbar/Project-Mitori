@@ -8,7 +8,7 @@ class EngineManager:
         }
         self._allowed_tickers : set[str] = {ticker.upper() for ticker in allowed_tickers}
 
-    def get_gateway(self, ticker: str) -> MitoriGateway:
+    def get_engine(self, ticker: str) -> MitoriGateway:
         normalized_ticker = ticker.upper()
         if normalized_ticker not in self._allowed_tickers:
             raise KeyError(f"Unsupported ticker : {ticker}")
