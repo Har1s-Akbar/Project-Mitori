@@ -1,17 +1,17 @@
 from typing import Dict
-from core.engine import OrderBook
 from core.config import ALLOWED_TICKERS
+from core.gateway_python import PythonMitoriGateway
 
 class PythonEngineRegistry:
     def __init__(self, allowed_ticker:set[str]):
-        self._engines: Dict[str, OrderBook] = {
-            ticker: OrderBook(ticker=ticker) for ticker in allowed_ticker
+        self._engines: Dict[str, PythonMitoriGateway] = {
+            ticker: PythonMitoriGateway(ticker=ticker) for ticker in allowed_ticker
         }
-    def get_engine(self, ticker: str) -> OrderBook:
+    def get_engine(self, ticker: str) -> PythonMitoriGateway:
         if ticker not in ALLOWED_TICKERS:
             raise KeyError(f"Not supported ticker: {ticker}")
         if ticker not in self._engines:
-            self._engines[ticker] = OrderBook(ticker)
+            self._engines[ticker] = PythonMitoriGateway(ticker)
             
         return self._engines[ticker]
 

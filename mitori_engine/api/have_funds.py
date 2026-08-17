@@ -10,10 +10,11 @@ import os
 from dotenv import load_dotenv
 from utility.have_funds_utility import redis_get_buyer_portfolio, redis_get_seller_positions
 load_dotenv()
+from core.config import ALLOWED_TICKERS
 
 async def have_funds(request: Request, user: AuthenticatedUser = Depends(is_user_Authenticated), order: OrderReq = None) -> AsyncGenerator[AuthenticatedUser, None]:
     
-    if order.ticker not in MARKET:
+    if order.ticker not in ALLOWED_TICKERS:
         raise HTTPException(status_code=404, detail="Ticker does not exist")
 
     multiplier = Decimal(os.getenv('SYSTEM_PRECISION_MULTIPLIER', '100000000'))

@@ -11,7 +11,6 @@ class EngineProtocol(Protocol):
         order_owner_id: uuid.UUID,
         side:Side,
         type:Type,
-        date_time:str,
         is_canceled:bool,
         number_of_shares: Decimal,
         price:Optional[Decimal],
@@ -20,4 +19,6 @@ class EngineProtocol(Protocol):
         ...
 
     def cancel_order(self, order_id: uuid.UUID)->Optional[Order]:
+        ...
+    def get_bbo()->dict:
         ...

@@ -5,8 +5,6 @@ import redis.asyncio as redis
 from core.manager_cpp import engine_registry as cpp_registry
 from core.manager_python import engine_registry as python_registry
 
-from core.gateway import MitoriGateway
-from schemas.schema import OrderReq
 from dotenv import load_dotenv
 
 load_dotenv()

@@ -30,3 +30,10 @@ htmlcov/
 # IDE Specific folders
 .vscode/
 .idea/
+
+# .dockerignore
+core_cpp/build/
+__pycache__/
+*.so
+*.pyc
+.env
