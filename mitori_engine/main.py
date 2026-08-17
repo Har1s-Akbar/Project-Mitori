@@ -94,9 +94,12 @@ async def place_order(
     
     ticker = order.ticker
     engine = get_matching_engine(ticker=ticker)
+    new_order_id = uuid.uuid4()
+
     executed_trades = engine.submit_order(
             ticker = order.ticker,
             side = order.side,
+            order_id=new_order_id,
             type = order.type,
             price = order.price,
             number_of_shares = order.number_of_shares,
@@ -136,16 +139,16 @@ async def place_order(
                     approximate=True
                 )
                 
-            current_bbo = engine.get_current_bbo()
+            current_bbo = engine.get_bbo()
             pipe.hset(f'ticker:{order.ticker}:bbo', mapping=current_bbo)
             
             await pipe.execute()
             
-        logger.info("trades_pushed_to_stream", order_id=order.order_id, ticker=order.ticker, trade_count=len(executed_trades))
+        logger.info("trades_pushed_to_stream", order_id=new_order_id, ticker=order.ticker, trade_count=len(executed_trades))
         
     return {
         "message": "Order Accepted",
-        "order_id": order.order_id,
+        "order_id": new_order_id,
         "trades": executed_trades
     }
 

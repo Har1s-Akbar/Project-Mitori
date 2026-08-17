@@ -19,7 +19,6 @@ class PythonMitoriGateway:
         order_owner_id: uuid.UUID,
         side:Side,
         type:Type,
-        date_time:str,
         is_canceled:bool,
         number_of_shares: Decimal,
         price:Optional[Decimal],
@@ -39,9 +38,7 @@ class PythonMitoriGateway:
             price=price_scaled,
             number_of_shares=shares_scaled,
             order_owner_id=order_owner_id,
-            is_canceled=False,
             max_authorized_funds=funds_scaled,
-            date_time=date_time,
             is_canceled=is_canceled
         )
 
