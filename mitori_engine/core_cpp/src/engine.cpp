@@ -135,7 +135,6 @@ std::vector<Trade> OrderBook::match_buy(Order* buy_order){
     }
     return executed_trades;
 }
-
 std::vector<Trade> OrderBook::match_sell(Order* sell_order) {
     std::vector<Trade> executed_trades;
 
@@ -156,7 +155,7 @@ std::vector<Trade> OrderBook::match_sell(Order* sell_order) {
         uint64_t trade_shares = std::min(sell_order->number_of_shares, best_bid->number_of_shares);
         uint64_t trade_price = best_bid->price; 
 
-        if (trade_price == UINT64_MAX) {
+        if (trade_price == 0) {
             if (sell_order->type == Type::LIMIT) {
                 trade_price = sell_order->price;
             } else {
@@ -167,6 +166,7 @@ std::vector<Trade> OrderBook::match_sell(Order* sell_order) {
                 trade_price = sell_order->price;
             }
         }
+
         sell_order->number_of_shares -= trade_shares;
         best_bid->number_of_shares -= trade_shares;
 
