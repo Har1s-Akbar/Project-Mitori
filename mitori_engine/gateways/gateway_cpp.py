@@ -30,11 +30,6 @@ class MitoriGateway:
     def _merge_uuid(self, high: int, low: int) -> uuid.UUID:
         return uuid.UUID(int=(high << 64) | low)
 
-    def _to_decimal(self, raw_val: int) -> Decimal:
-        if raw_val:
-            return Decimal(raw_val) / self.PRECISION_MULTIPLIER
-        else:
-            return Decimal(0)
     def submit_order(self, ticker:str ,order_id: uuid.UUID, order_owner_id: uuid.UUID,
                      side: Side, type: Type,is_canceled:bool,
                      number_of_shares: Decimal, price: Optional[Decimal],max_authorized_funds: Optional[Decimal] = None):
@@ -103,8 +98,8 @@ class MitoriGateway:
         raw_bbo = self.book.get_current_bbo()
 
         return {
-            "best_ask_price" : self._to_decimal(raw_bbo.get("best_ask_price")),
-            "best_bid_price":self._to_decimal(raw_bbo.get("best_bid_price"))
+            "best_ask_price" : int(raw_bbo.get("best_ask_price")),
+            "best_bid_price":int(raw_bbo.get("best_bid_price"))
         }
         
     def reset_engine(self):
