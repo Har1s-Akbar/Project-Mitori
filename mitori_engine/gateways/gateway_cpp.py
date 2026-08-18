@@ -103,4 +103,4 @@ class MitoriGateway:
         }
         
     def reset_engine(self):
-        engine.reset_memory()
+        self.book.reset_engine()

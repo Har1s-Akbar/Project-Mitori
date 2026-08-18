@@ -50,3 +50,5 @@ class PythonMitoriGateway:
         
     def get_bbo(self):
         return self.book.get_current_bbo()
+    def reset_engine(self):
+        self.reset_engine()
