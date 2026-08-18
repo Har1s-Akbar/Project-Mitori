@@ -21,11 +21,19 @@ bool AskComparator::operator()(const Order* a , const Order* b)const{
     return a->price > b->price;
 }
 
-void OrderBook::reset(){
-    current_time = 0;
+void OrderBook::reset_engine(){
 
-    bids = std::priority_queue<Order*, std::vector<Order*>, BidComparator>();
-    asks = std::priority_queue<Order*, std::vector<Order*>, AskComparator>();
+    ArenaAllocator::reset();
+
+    active_orders.clear();
+    canceled_orders.clear();
+
+    std::priority_queue<Order*, std::vector<Order*>, BidComparator>().swap(bids);
+    std::priority_queue<Order*, std::vector<Order*>, AskComparator>().swap(asks);
+
+    std::vector<OrderMetadata>().swap(metadata_vault);
+
+    current_time = 0;
 }
 
 std::vector<Trade> OrderBook::process_order(Order* order){

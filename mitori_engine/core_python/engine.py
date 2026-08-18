@@ -2,6 +2,7 @@ import heapq
 from .models import Order, Trade, Side, Type
 from uuid import UUID
 import os
+import gc
 
 class OrderBook():
     ticker: str
@@ -170,3 +171,12 @@ class OrderBook():
             "best_ask_price" : best_ask if best_ask else int(0),
             "best_bid_price" : best_bid if best_bid else int(0)
         }
+
+    def reset_engine(self):
+        self.bid = []
+        self.ask = []
+        self.active_uuids = {}
+        self.canceled_uuids = set()
+
+        gc.collect()
+        #  we call gc collect here explictly so that it does not run in between our benchmarking phase and corrupt the benchmarking data

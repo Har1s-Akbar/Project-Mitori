@@ -25,7 +25,7 @@ public:
 
         if (current_offset >= SLAB_SIZE) {
             current_slab++;
-            current_offset = 0; // Reset offset for the new slab
+            current_offset = 0;
 
             if (current_slab >= slabs.size()) {
                 slabs.push_back(new Order[SLAB_SIZE]);
@@ -58,7 +58,6 @@ struct AskComparator {
     bool operator()(const Order* a, const Order* b) const;
 };
 
-// Custom extremely fast Hasher for 128-bit integers so we can use them in unordered_map
 struct Int128Hash {
     std::size_t operator()(const unsigned __int128& k) const {
         uint64_t high = static_cast<uint64_t>(k >> 64);
@@ -81,18 +80,17 @@ private:
 public:
     explicit OrderBook(std::string ticker);
     
-    std::vector<OrderMetadata> metadata_vault; // The Cold Storage Vault
+    std::vector<OrderMetadata> metadata_vault; 
     
     std::vector<Trade> match_buy(Order* buy_order);
     std::vector<Trade> match_sell(Order* sell_order);
 
-    std::string ticker; // Ticker string is safe here (initialized once)
+    std::string ticker; 
     std::vector<Trade> process_order(Order* order);
     
-    // Updated to take the raw 128-bit integer instead of strings
     Order* tombstone_delete(unsigned __int128 order_id);
     Order* find_order_by_id(unsigned __int128 order_id);    
     std::unordered_map<std::string, uint64_t> get_current_bbo();
     
-    void reset();
+    void reset_engine();
 };
