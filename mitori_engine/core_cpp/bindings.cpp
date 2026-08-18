@@ -102,6 +102,6 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
         )
         .def("get_current_bbo", &OrderBook::get_current_bbo);
         
-        m.def("reset_engine", &ArenaAllocator::reset_engine);
+        m.def("reset_engine", &OrderBook::reset_engine);
         m.def("cleanup_memory", &ArenaAllocator::cleanup);
 }
