@@ -1,6 +1,9 @@
 import os
 import uuid
 import pytest
+import importlib
+import api.dependencies
+import main
 import pytest_asyncio
 import redis.asyncio as redisasync
 import jwt
@@ -20,6 +23,22 @@ from core_python.models import Side, Type
 load_dotenv()
 
 MULTIPLIER = int(os.getenv("SYSTEM_PRECISION_MULTIPLIER", 100000000))
+
+@pytest.fixture(params=["python", "cpp"])
+def engine_mode(request, monkeypatch):
+    """
+    Parametrizes tests over both 'python' and 'cpp' engine modes.
+    Dynamically sets ENGINE_MODE env var and reloads dependent modules.
+    """
+    mode = request.param
+    monkeypatch.setenv("ENGINE_MODE", mode)
+    
+    importlib.reload(api.dependencies)
+    importlib.reload(main)
+    
+    yield mode
+    
+    monkeypatch.undo()
 
 @pytest_asyncio.fixture(scope="function")
 async def test_redis():
