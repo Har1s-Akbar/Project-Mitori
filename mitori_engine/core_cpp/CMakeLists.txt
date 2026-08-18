@@ -24,6 +24,8 @@ pybind11_add_module(mitori_engine_cpp ${SOURCES})
 
 target_include_directories(mitori_engine_cpp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-if(MINGW)
-    target_link_options(mitori_engine_cpp PRIVATE "-static-libstdc++" "-static-libgcc")
+if(WIN32 OR MINGW)
+    message(FATAL_ERROR "Benchmarking requires a container-native Linux environment. Host-level Windows/MSYS2 builds are strictly forbidden.")
 endif()
+
+target_compile_options(mitori_engine_cpp PRIVATE -O3 -march=native)
