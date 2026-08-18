@@ -35,16 +35,34 @@ Same is the flow for order deletion but for it tombstone deleteion is used , ins
 For more indepth architectural decisions and nuances i would refer you to the README.md
 
 
-[Authentication jwt] → [Django using DRF and simpleJWT]
-|
-[Client] → [FastAPI /order]
-├── JWT Decode (security.py)
-├── have_funds (Redis WATCH/MULTI/EXEC)
-├── OrderBook.add_order() + execute()
-├── Trade Serialization (orjson)
-└── Redis XADD (executed_trades_stream)
-↓
-[Django Daemon] → [PostgreSQL] → [XACK] → [settle_cache]
+[Authentication] → [Django (DRF / simpleJWT)]
+       |
+       v
+[Client Application] 
+       |
+       v
+[FastAPI: POST /order]
+       ├── 1. JWT Decode (security.py)
+       ├── 2. Balance Check (Redis WATCH/MULTI/EXEC - have_funds)
+       |
+       ├── 3. EngineProtocol / Gateway Manager (Reads ENGINE_MODE)
+       |      ├── IF 'PYTHON': Route to Python Engine (heapq)
+       |      └── IF 'CPP': Route to C++ Engine (Pybind11 / Arena Allocator)
+       |
+       ├── 4. Order Execution (Strictly Raw Scaled Integers * 10^8)
+       |
+       ├── 5. Trade Serialization (orjson)
+       └── 6. Redis XADD (executed_trades_stream -> Raw Scaled Integers)
+       
+======================== [ ASYNC BOUNDARY ] ========================
+
+[Django Background Daemon] (Reads executed_trades_stream) | (Idempotency Guard)
+       ├── 1. Integer Descaling (Divides price/qty by 10^8)
+       ├── 2. Persistence -> [PostgreSQL]
+       ├── 3. Acknowledgment -> [Redis XACK]
+       └── 4. Cache Update -> [Redis settle_cache]
+
+======================== [ SYNC BOUNDARY ] ========================
 
 ## 4. Experimental Methodology
 In this section i will go over the experimental methodology and map out
@@ -53,13 +71,23 @@ In this section i will go over the experimental methodology and map out
 - **4.3- Constant Variables**
 - **4.4- Environment & Infrastructure**
 
-### 4.1- Independent Variables
-These are the variables that be changing throughout the benchmarking.
-|**variables**|**Levels**|**Constraints**|
-|-------------|----------|---------------|
-|*Engine Implementation*|*Python* & *C++ with pybind11*|*C++ must use similar semantics and implementation*|
-|*Orderbook Depth*|*1k, 25k, 50k*|*Must be preseeded*|
-|*Request Rate*|*500, 2k, 5k*|*use open model load*|
+### 4.1 Independent Variables
+These are the variables that will be manipulated throughout the benchmarking runs.
+
+| **Variable** | **Levels** | **Constraints** |
+| :--- | :--- | :--- |
+| *Engine Implementation* | *Python* & *C++ with pybind11* | *Strict architectural parity enforced via dual-mode test suite* |
+| *Orderbook Depth* | *1k, 25k, 50k* | *Must be pre-seeded prior to measurement* |
+| *Request Rate* | *500, 2k, 5k* | *Use open model load* |
+
+#### 4.1.1 Cross-Engine Parity Methodology
+The constraint dictating that the C++ implementation must utilize similar semantics to the Python baseline is strictly enforced. This ensures that execution time differentials represent genuine architectural characteristics (e.g., memory management, FFI overhead) rather than algorithmic divergence. To guarantee this comparison, the project employs a rigorous parity validation framework:
+
+*   **Interface Unification:** Both implementations strictly adhere to a shared `EngineProtocol` gateway interface, ensuring identical method signatures and command-query separation.
+*   **Dual-Mode CI Validation:** A comprehensive test suite utilizes a dynamic `engine_mode` fixture within `pytest`. Every continuous integration (CI) run executes the complete operational flow against both the pure Python (`heapq`) and C++ (`ArenaAllocator`) engines simultaneously.
+*   **HTTP-Level Output Verification:** A dedicated integration test asserts that, given an identical pre-seeded orderbook and an identical sequence of incoming orders, both engines produce a byte-for-byte identical sequence of executed trades at the HTTP egress layer.
+
+This parity validation neutralizes the risk of comparing structurally inequivalent logic, isolating the benchmark to measure purely the execution latency and memory constraints of the respective environments.
 
 *Depth and rate will be measured in 3x3 matrix , it gives us 9-cell experimental matrix and multiplied with our third independent variable engine it will be 18-cell experimental matrix*
 
@@ -100,6 +128,7 @@ Full description of all the software dependencies and their versions can be foun
 - *uvicorn==0.50.2*
 - *pydantic==2.13.4*
 - *Django==6.0.6*
+- *pybind11==3.1.0*
 - *djangorestframework==3.17.1*
 - *psycopg2-binary==2.9.12*
 - *PyJWT==2.13.0*
@@ -121,10 +150,14 @@ To maximize the throughput with these constraints
 - **File Descriptors:** *The open file descriptor limit within the WSL2 kernel is elevated to 65,535 `(ulimit -n 65535)` to prevent socket exhaustion during peak Request Per Second (RPS) loads*
 
 #### 4.4.4 Warm-up Protocol and Sampling
-In this section warm-up and sampling for the research is explained 
-- **Warm-Up Phase:** *Prior to recording telemetry for any experimental cell, an untimed warm-up load of 5,000 requests is executed. Data generated during this phase is explicitly discarded*
-- **Sample Size (N) and Duration:** *Each of the 18 experimental cells is executed across N = 5 independent test trials. To capture potential queue degradation , each trial sustains the target request rate for exactly 30 seconds.*
-- **Reset:** *Between individual trials, the memory state is cleared via Python explicit garbage collection (gc.collect()), Redis cache flush (FLUSHALL), and database transaction rollback to guarantee clean state of the memory, database and redis and then redis state is reseeded again for the next test*
+In this section, warm-up and sampling for the research are explained:
+
+- **Warm-Up Phase:** *Prior to recording telemetry for any experimental cell, an untimed warm-up load of 5,000 requests is executed to pre-prime the chunk slab allocator and cache pools. Data generated during this phase is explicitly discarded.*
+- **Sample Size (N) and Duration:** *Each of the 18 experimental cells is executed across N = 5 independent test trials. To capture potential queue degradation, each trial sustains the target request rate for exactly 30 seconds.*
+- **Reset & State Sterilization:** *Between individual trials, a multi-tier hard reset protocol is executed to guarantee an absolute zero-state environment across the entire stack:*
+  1. ***C++ Engine Layer:** The `OrderBook::reset_engine()` routine frees all active heap pointers via the authoritative tracking vault, forces immediate capacity deallocation of priority queues and the metadata vector using the STL swap idiom, and resets the chunk slab allocator via an O(1) pointer-offset rewind (`ArenaAllocator::reset()`).*
+  2. ***Python & Application Layer:** Explicit garbage collection (`gc.collect()`) is forced to eliminate cyclic references.*
+  3. ***Storage & Caching Layer:** A full Redis cache flush (`FLUSHALL`).
 
 ### 4.4.5 Statistical Significance and Non parametric Testing
 Due to the right-skewed nature of network latency, central tendencies will be compared using the non-parametric Mann-Whitney U test a = 0.05, and tail latencies p99 will be evaluated using bootstrapped 95% confidence intervals
