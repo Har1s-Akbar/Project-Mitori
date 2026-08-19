@@ -12,7 +12,7 @@ This was one of the first attempt to benchmark the python engine implemented wit
 
 #### Full Per-Trial Telemetry
 
-| Depth Tier | Trial | P_{50} Latency (ns) | P_{99} Latency (ns) | Throughput (Max RPS) |
+| Depth Tier | Trial | P_50 Latency (ns) | P_99 Latency (ns) | Throughput (Max RPS) |
 | :--- | :---: | :---: | :---: | :---: |
 | **1k** | 1 | 6,110.0 | 42,175.10 | 105,161.49 |
 | **1k** | 2 | 6,281.0 | 40,713.19 | 104,722.86 |
@@ -30,11 +30,9 @@ This was one of the first attempt to benchmark the python engine implemented wit
 | **50k** | 4 | 10,486.5 | 70,843.76 | 68,881.71 |
 | **50k** | 5 | 11,133.5 | 95,492.12 | 59,406.26 |
 
----
-
 #### Aggregated Tier Summary (N=5)
 
-| Depth Tier | Mean P_{50} (ns) | Mean P_{99} (ns) | Mean Max RPS | RPS Std Dev |
+| Depth Tier | Mean P_50 (ns) | Mean P_99 (ns) | Mean Max RPS | RPS Std Dev |
 | :--- | :---: | :---: | :---: | :---: |
 | **1k** | 6,612.2 | 51,982.45 | 94,855.13 | 11,102.82 |
 | **25k** | 9,553.7 | 78,850.97 | 68,512.82 | 5,160.05 |
@@ -53,7 +51,7 @@ This is the second benchmarking which was ran today , after optimizing the above
 
 #### Full Per-Trial Telemetry
 
-| Depth Tier | Trial | P_{50} Latency (ns) | P_{99} Latency (ns) | Throughput (Max RPS) | Start Depth | End Depth |
+| Depth Tier | Trial | P_50 Latency (ns) | P_99 Latency (ns) | Throughput (Max RPS) | Start Depth | End Depth |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **1k** | 1 | 3,993.0 | 21,789.01 | 163,125.44 | 476 | 17 |
 | **1k** | 2 | 4,197.0 | 23,164.03 | 156,330.64 | 476 | 17 |
@@ -70,3 +68,53 @@ This is the second benchmarking which was ran today , after optimizing the above
 | **50k** | 3 | 4,895.0 | 32,542.04 | 117,032.99 | 48,600 | 23,891 |
 | **50k** | 4 | 5,127.0 | 33,993.02 | 114,430.71 | 48,600 | 23,891 |
 | **50k** | 5 | 4,678.0 | 31,760.01 | 119,132.01 | 48,600 | 23,891 |
+
+#### Aggregated Tier Summary (N=5)
+
+| Depth Tier | Mean P_50 (ns) | Mean P_99 (ns) | Mean Max RPS | RPS Std Dev | Net Liquidity Drift |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **1k** | 4,320.8 | 23,466.82 | 154,105.59 | 13,066.02 | -459 orders (-96.4%) |
+| **25k** | 6,610.1 | 49,214.01 | 98,960.12 | 26,066.05 | -15,982 orders (-67.7%) |
+| **50k** | 4,840.8 | 32,204.82 | 118,065.93 | 4,047.88 | -24,709 orders (-50.8%) |
+
+### Improvements
+dropping the decimal and operating in pure int and also forcing the benchmarking script to drop the os call the results were alleviated.
+- **Throughput Max RSP**
+At 1k book depth tier the RSP went from 94k to 154k.
+At 25k depth RSP went from 68k to 98k.
+At 50k depth RSP went from 69k to 118k.
+- **P 50 latency**
+The typical time to process a single order dropped by ~35% to 50%. 
+At the 1k depth, it fell from 6,612.2 ns down to 4,320.8 ns.
+At the 25k depth, it fell from 9,553.7 ns down to 6,610 ns.
+At 50k depth, it fell from 10,187.7ns down to 4,840.8 ns.
+
+### Aggregated Performance Improvement Delta ($N=5$ Trials per Tier)
+
+| Depth Tier | Metric | Legacy Baseline | Optimized Engine | Absolute Delta | Percentage Improvement |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| **1k** | **Mean P_50** | 6,612.2 ns | 4,320.8 ns | -2,291.4 ns | **34.7% Faster** |
+| | **Mean P_99** | 51,982.5 ns | 23,466.8 ns | -28,515.7 ns | **54.9% Faster** |
+| | **Mean Max RPS** | 94,855.1 | 154,105.6 | +59,250.5 | **62.5% Higher Volume** |
+| **25k** | **Mean $P_{50}$** | 9,553.7 ns | 6,610.1 ns | -2,943.6 ns | **30.8% Faster** |
+| | **Mean P_99** | 78,851.0 ns | 49,214.0 ns | -29,637.0 ns | **37.6% Faster** |
+| | **Mean Max RPS** | 68,512.8 | 98,960.1 | +30,447.3 | **44.4% Higher Volume** |
+| **50k** | **Mean P_50** | 10,187.7 ns | 4,840.8 ns | -5,346.9 ns | **52.5% Faster** |
+| | **Mean P_99** | 71,930.4 ns | 32,204.8 ns | -39,725.6 ns | **55.2% Faster** |
+| | **Mean Max RPS** | 69,143.2 | 118,065.9 | +48,922.7 | **70.8% Higher Volume** |
+
+### Structural Trade-Offs & Diagnostic Hypotheses
+
+Optimization yielded a **35% to 70% performance boost**, but telemetry exposed two critical problems:
+
+#### 1. Anomalies & Root Causes
+
+##### A. Algorithmic Scaling Inversion (50k vs. 25k)
+* **Symptom:** 50k depth ran faster (**~118k RPS**) than 25k (**~98k RPS**), violating O(log N) scaling.
+* **Hypothesis:** **Liquidity Drift / Book Collapse.** 
+* **Root Cause:** Imbalanced Ornstein-Uhlenbeck order flow drained book depth (50k shrank by **50.8%**; 1k by **96.4%**). The engine ran faster because the heap physically shrank, leaving fewer nodes to traverse.
+
+##### B. Extreme Trial Variance (25k Tail Latency)
+* **Symptom:** Wild P_99 volatility in the 25k tier (Trial 1 at **88,166 ns** vs. Trial 3 at **28,091 ns**).
+* **Hypothesis:** **L2/L3 Cache Thrashing.**
+* **Root Cause:** Python's `pymalloc` allocated fragmented memory layouts across trials, inducing severe cache misses on Trial 1 that stabilized by Trial 3.
