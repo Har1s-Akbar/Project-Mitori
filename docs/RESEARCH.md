@@ -8,11 +8,11 @@
 ## Research Question
 In a distributed microservice architecture Trading system with JWT authentication , login based funds hydration from database, funds verification and stream-based settlement with optimistic locking on streams and pessimistic locking on database resources with custom settlement commands on backend which read from the streams and settle the records in database , In a microservice system similar to this the questions i want to address are
 
-**Q1-(Throughput)**
+- **Q1-(Throughput)**
 is a python based matching engine's throughput efficient if not does a rewrite in c++ worth the extra effort?
-**Q2-(Algorithmic)**
+- **Q2-(Algorithmic)**
 is python `heapq` based matching engine in python efficient as compared to c++?
-**Q3-(Systems):**
+- **Q3-(Systems):**
 In the full HTTP request path, what percentage of end-to-end latency is attributable to the matching engine versus I/O and middleware overhead?
 
 ## Hypothesis
@@ -51,7 +51,7 @@ For more indepth architectural decisions and nuances i would refer you to the RE
        |
        ├── 4. Order Execution (Strictly Raw Scaled Integers * 10^8)
        |
-       ├── 5. Trade Serialization (orjson)
+       ├── 5. Trade Serialization
        └── 6. Redis XADD (executed_trades_stream -> Raw Scaled Integers)
        
 ======================== [ ASYNC BOUNDARY ] ========================
