@@ -100,8 +100,7 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
             py::arg("order_id_high"),
             py::arg("order_id_low")
         )
-        .def("get_current_bbo", &OrderBook::get_current_bbo);
-        
-        m.def("reset_engine", &OrderBook::reset_engine);
+        .def("get_current_bbo", &OrderBook::get_current_bbo)
+        .def("reset_engine", &OrderBook::reset_engine);
         m.def("cleanup_memory", &ArenaAllocator::cleanup);
 }
