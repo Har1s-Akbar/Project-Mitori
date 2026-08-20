@@ -1,6 +1,8 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <optional>
+#include <chrono>   
+#include <vector>   
 #include "../include/engine.hpp"
 #include "../include/utility_class.hpp"
 
@@ -41,7 +43,9 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
                     uint64_t price,
                     uint64_t number_of_shares,
                     std::optional<uint64_t> max_authorized_funds){
-                        Order* order = ArenaAllocator::allocate();
+                        
+                        uint32_t order_index = ArenaAllocator::allocate_index();
+                        Order* order = ArenaAllocator::get_order(order_index);
                         
                         unsigned __int128 full_order_id = (static_cast<unsigned __int128>(order_id_high) << 64) | order_id_low;
                         unsigned __int128 full_owner_id = (static_cast<unsigned __int128>(order_owner_id_high) << 64) | order_owner_id_low;
@@ -61,7 +65,7 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
                         } else {
                             order->max_authorized_funds = UINT64_MAX; 
                         }
-                        return book.process_order(order);
+                        return book.process_order(order_index);
         },
             py::arg("order_id_high"),
             py::arg("order_id_low"),
@@ -73,6 +77,57 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
             py::arg("price"),
             py::arg("number_of_shares"),
             py::arg("max_authorized_funds") = std::nullopt)
+
+        .def("benchmark_batch", [](OrderBook & book, py::list orders_list) {
+            std::vector<uint32_t> batch_indices;
+            batch_indices.reserve(orders_list.size());
+            
+            for (auto item : orders_list) {
+                py::dict py_order = item.cast<py::dict>();
+                
+                uint32_t order_index = ArenaAllocator::allocate_index();
+                Order* order = ArenaAllocator::get_order(order_index);
+                
+                uint64_t order_id_high = py_order["order_id_high"].cast<uint64_t>();
+                uint64_t order_id_low = py_order["order_id_low"].cast<uint64_t>();
+                uint64_t owner_id_high = py_order["order_owner_id_high"].cast<uint64_t>();
+                uint64_t owner_id_low = py_order["order_owner_id_low"].cast<uint64_t>();
+                
+                unsigned __int128 full_order_id = (static_cast<unsigned __int128>(order_id_high) << 64) | order_id_low;
+                unsigned __int128 full_owner_id = (static_cast<unsigned __int128>(owner_id_high) << 64) | owner_id_low;
+                
+                uint32_t current_meta_index = book.metadata_vault.size();
+                book.metadata_vault.push_back({full_order_id, full_owner_id});
+                
+                order->metadata_index = current_meta_index;
+                order->type = py_order["type"].cast<Type>();
+                order->side = py_order["side"].cast<Side>();
+                order->is_canceled = py_order["is_canceled"].cast<bool>();
+                order->price = py_order["price"].cast<uint64_t>();
+                order->number_of_shares = py_order["number_of_shares"].cast<uint64_t>();
+                
+                if (py_order.contains("max_authorized_funds") && !py_order["max_authorized_funds"].is_none()) {
+                    order->max_authorized_funds = py_order["max_authorized_funds"].cast<uint64_t>();
+                } else {
+                    order->max_authorized_funds = UINT64_MAX;
+                }
+                
+                batch_indices.push_back(order_index);
+            }
+
+            std::vector<uint64_t> latencies;
+            latencies.reserve(batch_indices.size());
+
+            for (uint32_t index : batch_indices) {
+                auto start = std::chrono::high_resolution_clock::now();
+                book.process_order(index);
+                auto end = std::chrono::high_resolution_clock::now();
+                auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+                latencies.push_back(duration.count());
+            }
+
+            return latencies;
+        })
 
         .def("tombstone_delete", [](OrderBook& book, uint64_t order_id_high, uint64_t order_id_low)-> py::object {
             unsigned __int128 full_order_id = (static_cast<unsigned __int128>(order_id_high) << 64) | order_id_low;
