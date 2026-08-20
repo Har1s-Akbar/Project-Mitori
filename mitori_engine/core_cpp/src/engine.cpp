@@ -7,14 +7,18 @@ OrderBook::OrderBook(std::string ticker) {
     this->current_time = 0;
 }
 
-bool BidComparator::operator()(const Order* a, const Order* b) const {
+bool BidComparator::operator()(const uint32_t a_idx, const uint32_t b_idx) const {
+    Order* a = ArenaAllocator::get_order(a_idx);
+    Order* b = ArenaAllocator::get_order(b_idx);
     if(a->price == b->price){
         return a->date_time > b->date_time;
     }
     return a->price < b->price; 
 }
 
-bool AskComparator::operator()(const Order* a , const Order* b)const{
+bool AskComparator::operator()(const uint32_t a_idx , const uint32_t b_idx) const {
+    Order* a = ArenaAllocator::get_order(a_idx);
+    Order* b = ArenaAllocator::get_order(b_idx);
     if(a->price == b->price){
         return a->date_time > b->date_time;
     }
@@ -22,21 +26,23 @@ bool AskComparator::operator()(const Order* a , const Order* b)const{
 }
 
 void OrderBook::reset_engine(){
-
     ArenaAllocator::reset();
 
     active_orders.clear();
     canceled_orders.clear();
 
-    std::priority_queue<Order*, std::vector<Order*>, BidComparator>().swap(bids);
-    std::priority_queue<Order*, std::vector<Order*>, AskComparator>().swap(asks);
+    // 2. Queues swapped using uint32_t
+    std::priority_queue<uint32_t, std::vector<uint32_t>, BidComparator>().swap(bids);
+    std::priority_queue<uint32_t, std::vector<uint32_t>, AskComparator>().swap(asks);
 
     std::vector<OrderMetadata>().swap(metadata_vault);
 
     current_time = 0;
 }
 
-std::vector<Trade> OrderBook::process_order(Order* order){
+std::vector<Trade> OrderBook::process_order(uint32_t order_idx){
+    Order* order = ArenaAllocator::get_order(order_idx);
+    
     order->date_time = current_time++;
     order->is_canceled = false;
     
@@ -45,33 +51,37 @@ std::vector<Trade> OrderBook::process_order(Order* order){
     std::vector<Trade> executed_trades;
     if(order->type == Type::LIMIT){
         if(order->side == Side::BUY){
-            executed_trades = match_buy(order);
+            executed_trades = match_buy(order_idx);
             if(order->number_of_shares > 0){
-                bids.push(order);
+                bids.push(order_idx); 
                 active_orders[current_order_id] = order;
             }
         } else {
-            executed_trades = match_sell(order);
+            executed_trades = match_sell(order_idx);
             if(order->number_of_shares > 0){
-                asks.push(order);
+                asks.push(order_idx); 
                 active_orders[current_order_id] = order;
             }
         }
     } else if(order->type == Type::MARKET){
         if(order->side == Side::BUY){
-            executed_trades = match_buy(order);
+            executed_trades = match_buy(order_idx);
         } else {
-            executed_trades = match_sell(order);
+            executed_trades = match_sell(order_idx);
         }
     }
     return executed_trades;
 }
-std::vector<Trade> OrderBook::match_buy(Order* buy_order){
+
+std::vector<Trade> OrderBook::match_buy(uint32_t buy_order_idx){
+    Order* buy_order = ArenaAllocator::get_order(buy_order_idx);
     std::vector<Trade> executed_trades;
     uint64_t total_spent = 0;
     
     while(!asks.empty() && buy_order->number_of_shares > 0){
-        Order* best_ask = asks.top();
+        uint32_t best_ask_idx = asks.top();
+        Order* best_ask = ArenaAllocator::get_order(best_ask_idx);
+        
         if(best_ask->is_canceled){
             asks.pop();
             unsigned __int128 best_ask_id = metadata_vault[best_ask->metadata_index].order_id;
@@ -143,11 +153,14 @@ std::vector<Trade> OrderBook::match_buy(Order* buy_order){
     }
     return executed_trades;
 }
-std::vector<Trade> OrderBook::match_sell(Order* sell_order) {
+
+std::vector<Trade> OrderBook::match_sell(uint32_t sell_order_idx) {
+    Order* sell_order = ArenaAllocator::get_order(sell_order_idx);
     std::vector<Trade> executed_trades;
 
     while (!bids.empty() && sell_order->number_of_shares > 0) {
-        Order* best_bid = bids.top();
+        uint32_t best_bid_idx = bids.top();
+        Order* best_bid = ArenaAllocator::get_order(best_bid_idx); 
         
         if (best_bid->is_canceled) {
             bids.pop();
@@ -204,7 +217,8 @@ std::unordered_map<std::string, uint64_t> OrderBook::get_current_bbo() {
     uint64_t best_bid = 0;
 
     while (!asks.empty()) {
-        Order* top_ask = asks.top();        
+        uint32_t top_ask_idx = asks.top();
+        Order* top_ask = ArenaAllocator::get_order(top_ask_idx);        
         
         if (!top_ask->is_canceled) {
             best_ask = top_ask->price;
@@ -217,7 +231,8 @@ std::unordered_map<std::string, uint64_t> OrderBook::get_current_bbo() {
     }
     
     while (!bids.empty()) {
-        Order* top_bid = bids.top();
+        uint32_t top_bid_idx = bids.top();
+        Order* top_bid = ArenaAllocator::get_order(top_bid_idx);
         
         if (!top_bid->is_canceled) {
             best_bid = top_bid->price;

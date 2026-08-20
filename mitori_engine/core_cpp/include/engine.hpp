@@ -12,13 +12,13 @@
 class ArenaAllocator {
 private:
     inline static const size_t SLAB_SIZE = 10000; // 10,000 orders per chunk
-    inline static std::vector<Order*> slabs;      // Pointers to our allocated chunks
+    inline static std::vector<Order*> slabs;      // Pointers to our allocated chunk memory
     
     inline static size_t current_slab = 0;
     inline static size_t current_offset = 0;
 
 public:
-    static Order* allocate() {
+    static uint32_t allocate_index() {
         if (slabs.empty()) {
             slabs.push_back(new Order[SLAB_SIZE]);
         }
@@ -32,7 +32,15 @@ public:
             }
         }
 
-        return &slabs[current_slab][current_offset++];
+        uint32_t index = (current_slab * SLAB_SIZE) + current_offset;
+        current_offset++;
+        return index;
+    }
+
+    static Order* get_order(uint32_t index) {
+        size_t slab = index / SLAB_SIZE;
+        size_t offset = index % SLAB_SIZE;
+        return &slabs[slab][offset];
     }
 
     static void reset() {
@@ -51,11 +59,11 @@ public:
 };
 
 struct BidComparator {
-    bool operator()(const Order* a, const Order* b) const;
+    bool operator()(const uint32_t a_index, const uint32_t b_index) const;
 };
 
 struct AskComparator {
-    bool operator()(const Order* a, const Order* b) const;
+    bool operator()(const uint32_t a_index, const uint32_t b_index) const;
 };
 
 struct Int128Hash {
@@ -69,11 +77,10 @@ struct Int128Hash {
 
 class OrderBook {
 private:
-    std::priority_queue<Order*, std::vector<Order*>, BidComparator> bids;
-    std::priority_queue<Order*, std::vector<Order*>, AskComparator> asks;
+    std::priority_queue<uint32_t, std::vector<uint32_t>, BidComparator> bids;
+    std::priority_queue<uint32_t, std::vector<uint32_t>, AskComparator> asks;
     uint64_t current_time;
 
-    // Use our custom Int128Hash to keep the maps entirely string-free!
     std::unordered_map<unsigned __int128, Order*, Int128Hash> active_orders;
     std::unordered_set<unsigned __int128, Int128Hash> canceled_orders;
 
@@ -82,11 +89,12 @@ public:
     
     std::vector<OrderMetadata> metadata_vault; 
     
-    std::vector<Trade> match_buy(Order* buy_order);
-    std::vector<Trade> match_sell(Order* sell_order);
+    std::vector<Trade> match_buy(uint32_t buy_order_idx);
+    std::vector<Trade> match_sell(uint32_t sell_order_idx);
 
     std::string ticker; 
-    std::vector<Trade> process_order(Order* order);
+    
+    std::vector<Trade> process_order(uint32_t order_idx);
     
     Order* tombstone_delete(unsigned __int128 order_id);
     Order* find_order_by_id(unsigned __int128 order_id);    
