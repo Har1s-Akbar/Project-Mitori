@@ -85,9 +85,11 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
             for (auto item : orders_list) {
                 py::dict py_order = item.cast<py::dict>();
                 
-                uint32_t order_idx = ArenaAllocator::allocate_idx();
-                Order* order = ArenaAllocator::get_order(order_idx);
+                uint32_t order_index = ArenaAllocator::allocate_index();
+                Order* order = ArenaAllocator::get_order(order_index);
                 
+                uint64_t order_id_high = py_order["order_id_high"].cast<uint64_t>();
+                uint64_t order_id_low = py_order["order_id_low"].cast<uint64_t>();
                 uint64_t owner_id_high = py_order["order_owner_id_high"].cast<uint64_t>();
                 uint64_t owner_id_low = py_order["order_owner_id_low"].cast<uint64_t>();
                 
@@ -104,7 +106,13 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
                 order->price = py_order["price"].cast<uint64_t>();
                 order->number_of_shares = py_order["number_of_shares"].cast<uint64_t>();
                 
-                batch_indices.push_back(order_idx);
+                if (py_order.contains("max_authorized_funds") && !py_order["max_authorized_funds"].is_none()) {
+                    order->max_authorized_funds = py_order["max_authorized_funds"].cast<uint64_t>();
+                } else {
+                    order->max_authorized_funds = UINT64_MAX;
+                }
+                
+                batch_indices.push_back(order_index);
             }
 
             std::vector<uint64_t> latencies;

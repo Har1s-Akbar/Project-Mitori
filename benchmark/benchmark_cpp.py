@@ -44,17 +44,23 @@ def log_to_csv(filepath: str, data_row: list):
         writer.writerow(data_row)
 
 def unbox_order_to_cpp_dict(raw_order: dict) -> dict:
-    """Safely casts JSON strings, scales precision, splits UUIDs, and maps to C++ Enums."""
+    """Safely casts JSON strings, scales precision, splits UUIDs, and handles missing Order IDs."""
     parsed = raw_order.copy()
     
     if parsed.get("price") is not None:
         parsed["price"] = int(Decimal(str(parsed["price"])) * PRECISION_MULTIPLIER)
-        
     if parsed.get("number_of_shares") is not None:
         parsed["number_of_shares"] = int(Decimal(str(parsed["number_of_shares"])) * PRECISION_MULTIPLIER)
         
+    if "order_id" in parsed and parsed["order_id"]:
+        order_uuid_int = uuid.UUID(parsed["order_id"]).int
+        order_id_high = order_uuid_int >> 64
+        order_id_low = order_uuid_int & ((1 << 64) - 1)
+    else:
+        order_id_high = 0
+        order_id_low = 0
+        
     owner_uuid_int = uuid.UUID(parsed["order_owner_id"]).int
-    
     owner_id_high = owner_uuid_int >> 64
     owner_id_low = owner_uuid_int & ((1 << 64) - 1)
     
@@ -62,6 +68,8 @@ def unbox_order_to_cpp_dict(raw_order: dict) -> dict:
     type_enum = mitori_engine_cpp.Type.LIMIT if parsed['type'] == 'LIMIT' else mitori_engine_cpp.Type.MARKET
     
     return {
+        "order_id_high": order_id_high,
+        "order_id_low": order_id_low,
         "order_owner_id_high": owner_id_high,
         "order_owner_id_low": owner_id_low,
         "side": side_enum,
@@ -69,6 +77,7 @@ def unbox_order_to_cpp_dict(raw_order: dict) -> dict:
         "is_canceled": str(parsed.get('is_canceled', 'False')).lower() == 'true',
         "price": parsed["price"],
         "number_of_shares": parsed["number_of_shares"],
+        "max_authorized_funds": None
     }
 
 def run_benchmark_for_tier(tier_name: str, seed_file_path: str, raw_active_stream: list, csv_filename: str):
@@ -89,10 +98,11 @@ def run_benchmark_for_tier(tier_name: str, seed_file_path: str, raw_active_strea
         
         for o in cpp_resting_orders:
             engine.process_order(
+                o["order_id_high"], o["order_id_low"],
                 o["order_owner_id_high"], o["order_owner_id_low"],
                 o["side"], o["type"], o["is_canceled"],
                 o["price"], o["number_of_shares"],
-                
+                o["max_authorized_funds"]
             )
             
         start_depth = len(cpp_resting_orders) 
