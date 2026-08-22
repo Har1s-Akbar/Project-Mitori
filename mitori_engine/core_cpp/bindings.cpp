@@ -78,18 +78,16 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
             py::arg("number_of_shares"),
             py::arg("max_authorized_funds") = std::nullopt)
 
-        .def("benchmark_batch", [](OrderBook & book, py::list orders_list) {
+        .def("benchmark_batch", [](OrderBook & book, py::list orders_list, size_t warmup_count = 5000) {
             std::vector<uint32_t> batch_indices;
             batch_indices.reserve(orders_list.size());
             
             for (auto item : orders_list) {
                 py::dict py_order = item.cast<py::dict>();
                 
-                uint32_t order_index = ArenaAllocator::allocate_index();
-                Order* order = ArenaAllocator::get_order(order_index);
+                uint32_t order_idx = ArenaAllocator::allocate_idx();
+                Order* order = ArenaAllocator::get_order(order_idx);
                 
-                uint64_t order_id_high = py_order["order_id_high"].cast<uint64_t>();
-                uint64_t order_id_low = py_order["order_id_low"].cast<uint64_t>();
                 uint64_t owner_id_high = py_order["order_owner_id_high"].cast<uint64_t>();
                 uint64_t owner_id_low = py_order["order_owner_id_low"].cast<uint64_t>();
                 
@@ -112,22 +110,32 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
                     order->max_authorized_funds = UINT64_MAX;
                 }
                 
-                batch_indices.push_back(order_index);
+                batch_indices.push_back(order_idx);
             }
 
             std::vector<uint64_t> latencies;
-            latencies.reserve(batch_indices.size());
+            if (batch_indices.size() > warmup_count) {
+                latencies.reserve(batch_indices.size() - warmup_count);
+            }
 
-            for (uint32_t index : batch_indices) {
+            size_t i = 0;
+            
+            for (; i < warmup_count && i < batch_indices.size(); ++i) {
+                book.process_order(batch_indices[i]);
+            }
+
+            for (; i < batch_indices.size(); ++i) {
                 auto start = std::chrono::high_resolution_clock::now();
-                book.process_order(index);
+                book.process_order(batch_indices[i]);
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
                 latencies.push_back(duration.count());
             }
 
             return latencies;
-        })
+        }, 
+            py::arg("orders_list"), 
+            py::arg("warmup_count") = 5000)
 
         .def("tombstone_delete", [](OrderBook& book, uint64_t order_id_high, uint64_t order_id_low)-> py::object {
             unsigned __int128 full_order_id = (static_cast<unsigned __int128>(order_id_high) << 64) | order_id_low;
