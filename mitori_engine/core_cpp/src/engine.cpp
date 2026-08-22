@@ -268,3 +268,7 @@ Order* OrderBook::tombstone_delete(unsigned __int128 order_id) {
     }
     return order;
 }
+
+uint64_t OrderBook::get_book_depth() {
+    return static_cast<uint64_t>(bids.size() + asks.size());
+}

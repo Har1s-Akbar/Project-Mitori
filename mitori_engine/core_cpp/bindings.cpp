@@ -78,7 +78,7 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
             py::arg("number_of_shares"),
             py::arg("max_authorized_funds") = std::nullopt)
 
-        .def("benchmark_batch", [](OrderBook & book, py::list orders_list) {
+        .def("benchmark_batch", [](OrderBook & book, py::list orders_list, size_t warmup_count = 5000) {
             std::vector<uint32_t> batch_indices;
             batch_indices.reserve(orders_list.size());
             
@@ -116,17 +116,31 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
             }
 
             std::vector<uint64_t> latencies;
-            latencies.reserve(batch_indices.size());
+            if (batch_indices.size() > warmup_count) {
+                latencies.reserve(batch_indices.size() - warmup_count);
+            }
 
-            for (uint32_t index : batch_indices) {
+            size_t i = 0;
+            
+            for (; i < warmup_count && i < batch_indices.size(); ++i) {
+                book.process_order(batch_indices[i]);
+            }
+
+            for (; i < batch_indices.size(); ++i) {
                 auto start = std::chrono::high_resolution_clock::now();
-                book.process_order(index);
+                book.process_order(batch_indices[i]);
                 auto end = std::chrono::high_resolution_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
                 latencies.push_back(duration.count());
             }
 
             return latencies;
+        }, 
+            py::arg("orders_list"), 
+            py::arg("warmup_count") = 5000)
+
+        .def("get_book_depth", [](OrderBook &book) {
+            return book.get_book_depth();
         })
 
         .def("tombstone_delete", [](OrderBook& book, uint64_t order_id_high, uint64_t order_id_low)-> py::object {

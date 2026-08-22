@@ -7,14 +7,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Release)
 
 find_package(Python 3.14 REQUIRED COMPONENTS Interpreter Development)
-execute_process(
-    COMMAND python -c "import pybind11; print(pybind11.get_cmake_dir())"
-    OUTPUT_VARIABLE PYBIND_DIR
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-set(pybind11_DIR "${PYBIND_DIR}")
-find_package(pybind11 REQUIRED)
 
+include(FetchContent)
+FetchContent_Declare(
+    pybind11
+    URL https://github.com/pybind/pybind11/archive/refs/tags/v2.11.1.tar.gz
+)
+FetchContent_MakeAvailable(pybind11)
 set(SOURCES 
     ${CMAKE_CURRENT_SOURCE_DIR}/bindings.cpp   
     ${CMAKE_CURRENT_SOURCE_DIR}/src/engine.cpp 
