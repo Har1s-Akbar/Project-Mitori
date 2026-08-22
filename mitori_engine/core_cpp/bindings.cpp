@@ -104,12 +104,6 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
                 order->price = py_order["price"].cast<uint64_t>();
                 order->number_of_shares = py_order["number_of_shares"].cast<uint64_t>();
                 
-                if (py_order.contains("max_authorized_funds") && !py_order["max_authorized_funds"].is_none()) {
-                    order->max_authorized_funds = py_order["max_authorized_funds"].cast<uint64_t>();
-                } else {
-                    order->max_authorized_funds = UINT64_MAX;
-                }
-                
                 batch_indices.push_back(order_idx);
             }
 

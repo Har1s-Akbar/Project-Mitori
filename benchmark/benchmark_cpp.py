@@ -69,7 +69,6 @@ def unbox_order_to_cpp_dict(raw_order: dict) -> dict:
         "is_canceled": str(parsed.get('is_canceled', 'False')).lower() == 'true',
         "price": parsed["price"],
         "number_of_shares": parsed["number_of_shares"],
-        "max_authorized_funds": None
     }
 
 def run_benchmark_for_tier(tier_name: str, seed_file_path: str, raw_active_stream: list, csv_filename: str):
@@ -93,7 +92,7 @@ def run_benchmark_for_tier(tier_name: str, seed_file_path: str, raw_active_strea
                 o["order_owner_id_high"], o["order_owner_id_low"],
                 o["side"], o["type"], o["is_canceled"],
                 o["price"], o["number_of_shares"],
-                o["max_authorized_funds"]
+                
             )
             
         start_depth = len(cpp_resting_orders) 
