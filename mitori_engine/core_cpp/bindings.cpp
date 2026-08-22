@@ -139,6 +139,10 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
             py::arg("orders_list"), 
             py::arg("warmup_count") = 5000)
 
+        .def("get_book_depth", [](OrderBook &book) {
+            return book.get_book_depth();
+        })
+
         .def("tombstone_delete", [](OrderBook& book, uint64_t order_id_high, uint64_t order_id_low)-> py::object {
             unsigned __int128 full_order_id = (static_cast<unsigned __int128>(order_id_high) << 64) | order_id_low;
 

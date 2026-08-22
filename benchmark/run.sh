@@ -1,5 +1,3 @@
-#!/bin/bash
-# Stop execution instantly if any command fails
 set -e 
 
 echo "========== 1. COMPILING C++ ENGINE =========="

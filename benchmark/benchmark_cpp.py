@@ -49,9 +49,12 @@ def unbox_order_to_cpp_dict(raw_order: dict) -> dict:
     
     if parsed.get("price") is not None:
         parsed["price"] = int(Decimal(str(parsed["price"])) * PRECISION_MULTIPLIER)
+    else:
+        parsed["price"] = 0
     if parsed.get("number_of_shares") is not None:
         parsed["number_of_shares"] = int(Decimal(str(parsed["number_of_shares"])) * PRECISION_MULTIPLIER)
-        
+    else:
+        parsed["number_of_shares"] = 0
     if "order_id" in parsed and parsed["order_id"]:
         order_uuid_int = uuid.UUID(parsed["order_id"]).int
         order_id_high = order_uuid_int >> 64
@@ -64,8 +67,8 @@ def unbox_order_to_cpp_dict(raw_order: dict) -> dict:
     owner_id_high = owner_uuid_int >> 64
     owner_id_low = owner_uuid_int & ((1 << 64) - 1)
     
-    side_enum = mitori_engine_cpp.Side.BUY if parsed['side'] == 'BUY' else mitori_engine_cpp.Side.SELL
-    type_enum = mitori_engine_cpp.Type.LIMIT if parsed['type'] == 'LIMIT' else mitori_engine_cpp.Type.MARKET
+    side_enum = mitori_engine_cpp.Side.BUY if parsed['side'] == 'buy' else mitori_engine_cpp.Side.SELL
+    type_enum = mitori_engine_cpp.Type.LIMIT if parsed['type'] == 'limit' else mitori_engine_cpp.Type.MARKET
     
     return {
         "order_id_high": order_id_high,
@@ -105,7 +108,7 @@ def run_benchmark_for_tier(tier_name: str, seed_file_path: str, raw_active_strea
                 o["max_authorized_funds"]
             )
             
-        start_depth = len(cpp_resting_orders) 
+        start_depth = engine.get_book_depth() 
         
         gc.disable()
         
@@ -115,7 +118,7 @@ def run_benchmark_for_tier(tier_name: str, seed_file_path: str, raw_active_strea
         
         gc.enable()
         
-        end_depth = start_depth + len(active_stream) 
+        end_depth = engine.get_book_depth() 
         
         print(f"    [Drift Check] Start Depth: {start_depth:,} | End Depth: {end_depth:,} | Drift: +{end_depth - start_depth:,}")
         

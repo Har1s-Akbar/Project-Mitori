@@ -100,5 +100,7 @@ public:
     Order* find_order_by_id(unsigned __int128 order_id);    
     std::unordered_map<std::string, uint64_t> get_current_bbo();
     
+    uint64_t get_book_depth();
+
     void reset_engine();
 };
