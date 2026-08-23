@@ -97,7 +97,7 @@ def run_benchmark_for_tier(tier_name: str, seed_file_path: str, raw_active_strea
     num_timing_orders = len(active_stream) - 5000
     
     for trial in range(1, N_TRIALS + 1):
-        engine = mitori_engine_cpp.OrderBook('AAPL')
+        engine = mitori_engine_cpp.OrderBook('APP')
         
         for o in cpp_resting_orders:
             engine.process_order(
