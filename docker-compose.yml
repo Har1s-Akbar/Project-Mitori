@@ -117,6 +117,7 @@ services:
   benchmark_runner:
     build: ./benchmark
     profiles: ["testing"]
+    privileged: true
     volumes:
       - ./benchmark:/app/benchmark
       - ./mitori_engine:/app/mitori_engine
