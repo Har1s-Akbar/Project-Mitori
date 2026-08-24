@@ -5,6 +5,8 @@
 #include <vector>   
 #include "../include/engine.hpp"
 #include "../include/utility_class.hpp"
+#include <x86intrin.h>
+#include <thread>
 
 namespace py = pybind11;
 
@@ -115,27 +117,38 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
                 batch_indices.push_back(order_index);
             }
 
-            std::vector<uint64_t> latencies;
-            if (batch_indices.size() > warmup_count) {
-                latencies.reserve(batch_indices.size() - warmup_count);
-            }
+            //Implementing and replacing the chrono with intrinsic TSC register read.
+            auto t1 = std::chrono::high_resolution_clock::now();
+            unsigned int aux;
+            uint64_t c1 = __rdtscp(&aux);
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            uint64_t c2 = __rdtscp(&aux);
+            auto t2 = std::chrono::high_resolution_clock::now();
+            double tsc_to_ns = static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count()) / (c2 - c1);
 
+            size_t timing_count = (batch_indices.size() > warmup_count) ? (batch_indices.size() - warmup_count) : 0;
+            
+            std::vector<uint64_t> latencies(timing_count, 0);
+            
             size_t i = 0;
             
             for (; i < warmup_count && i < batch_indices.size(); ++i) {
                 book.process_order(batch_indices[i]);
             }
 
+            size_t timing_index = 0;
             for (; i < batch_indices.size(); ++i) {
-                auto start = std::chrono::high_resolution_clock::now();
+                uint64_t start = __rdtscp(&aux);
+                
                 book.process_order(batch_indices[i]);
-                auto end = std::chrono::high_resolution_clock::now();
-                auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
-                latencies.push_back(duration.count());
+                
+                uint64_t end = __rdtscp(&aux);
+                
+                latencies[timing_index++] = static_cast<uint64_t>((end - start) * tsc_to_ns);
             }
-
             return latencies;
         }, 
+        
             py::arg("orders_list"), 
             py::arg("warmup_count") = 5000)
 
