@@ -1,6 +1,6 @@
 FROM python:3.14-slim
 
-RUN apt-get update && apt-get install -y build-essential cmake linux-perf
+RUN apt-get update && apt-get install -y build-essential cmake linux-perf valgrind
 
 WORKDIR /app
 RUN pip install numpy orjson
