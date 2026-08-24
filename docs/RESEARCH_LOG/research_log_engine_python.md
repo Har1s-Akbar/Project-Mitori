@@ -1,4 +1,4 @@
-# Pure Execution Time of the Python and C++ Engine analyzed, picking up noise and anomalies
+# Pure Execution Time of the Python Engine analyzed, picking up noise and anomalies
 
 **Date:** `[19/08/2026]`  
 **Author:** `[Haris Ahmad]`
