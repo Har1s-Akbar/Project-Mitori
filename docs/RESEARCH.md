@@ -9,7 +9,7 @@
 In a distributed microservice architecture Trading system with JWT authentication , login based funds hydration from database, funds verification and stream-based settlement with optimistic locking on streams and pessimistic locking on database resources with custom settlement commands on backend which read from the streams and settle the records in database , In a microservice system similar to this the questions i want to address are
 
 - **Q1-(Throughput)**
-is a python based matching engine's throughput efficient if not does a rewrite in c++ worth the extra effort?
+Under concurrent multi threaded sustained load , how does the the throughput and the queue waiting time for order scales as compared to the multi threaded c++ implementation
 - **Q2-(Algorithmic)**
 is python `heapq` based matching engine in python efficient as compared to c++?
 - **Q3-(Systems):**
@@ -17,8 +17,7 @@ In the full HTTP request path, what percentage of end-to-end latency is attribut
 
 ## Hypothesis
 **H1 — Throughput Hypothesis**
-> Under High concurent load upto (5000 RPS), the c++ and pybind11 implementation will fail to demonstrate a statistically significant throughput advantage over python native implementation. The overhead introduced by the FFI(foreign function interface) and unboxing of pydantic models into c++ data structures will mask the algorithmic speed of c++, resulting in I/O and serialization bottleneck
-
+> Under High concurent multi threaded load at engine level c++ implementation will yield exceptionally higher throughput as compared to multi threaded python engine because of Python Global Interpreter Lock , that will starve the threads and will force them to be processed sequentially not concurently, forcing the python throughput to be roughly equal to a single threaded engine.
 **H2 — Algorithmic Hypothesis**
 > A C++ order book implementation (exposed via pybind11) will exhibit lower matching latency than the Python `heapq` implementation. The speedup will increase with book depth due to memory locality and reduced allocation overhead.
 
@@ -92,12 +91,21 @@ This parity validation neutralizes the risk of comparing structurally inequivale
 *Depth and rate will be measured in 3x3 matrix , it gives us 9-cell experimental matrix and multiplied with our third independent variable engine it will be 18-cell experimental matrix*
 
 ### 4.2- Dependent Variables
-These are the variables which are our main concern , they will yield different values based on the variance of independent variables and they will form the result of this research
+These are the variables which are our main concern , they will yield different values based on the variance of independent variables and they will form the result of this research.
+Definition of **Throughput** changes depeneding upon the benchmarking stage.
+- **Question 1 (Throughput):** `For question 1, Throughput is the maximum number of orders processed by the engine per trial when all threads are concurently forcing the orders in the engine.`
+- **Question 2 (Throughput)** `For question 2, Throughput is the maximum number of orders processed per execution cycle and trial.`
+
+Similarly P50 and P99 mmean  completely different things in Research Question 1 and 2
+- **Question 1 (P50 & P99):** `For Research question 1 P50 and P99 latency also includes the waiting time which is the resting time of order before matching`
+- **Question 2 (P50 & P99):** `For Research question 2 P50 and P99 only include the service time which is how fast the ordered is processed in engine`
 
 |**variables**|**Definition**|
 |-------------|--------------|
 |*Throughput*|*RPS at a specific latency threshold*|
 |*Execution Time*|*Time taken by an order to be executed algorithmically*|
+|*P50*|*The median Latency*|
+|*P99*|*The Tail Latency*|
 |*API response latency*|*Total time required by a request including JWT and dependency resolution*|
 
 ### 4.3- Constant Variables
@@ -107,6 +115,8 @@ These are the variables that should remain constant throughout the experimentati
 |-------------|-------|
 |*Payload Schema*|*JSON size must remain constant*|
 |*Order composition Ratio*|*Limit order / Market Order ratio shall remain constant for each phase*|
+|*Start Depth*|*Starting Depth of the Orderbook*|
+|*End Depth*|*Ending Depth of the Order Book*|
 |*GC Collection State*|*Explicitly disabled for Phase 1 pure-engine tests; enabled for Phase 2 API tests*|
 
 ### 4.4 Environment & Infrastructure
