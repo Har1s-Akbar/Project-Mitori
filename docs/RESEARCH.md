@@ -1,6 +1,6 @@
 # Execution time and Request Latency Overhead comparison of Python based engine vs c++ based engine in a decoupled Microservice Architectural based Exchange Infrastructure 
 
-**Date:** `[05/08/2026]`
+**Date:** `[09/05/2026]`
 **Author:** `[Haris Ahmad]`
 
 >**Rule:** This Document will define what we will measure and how we will measure it, This Document will also include the Research Questions , Methodology and hypothesis of this research.
@@ -9,16 +9,15 @@
 In a distributed microservice architecture Trading system with JWT authentication , login based funds hydration from database, funds verification and stream-based settlement with optimistic locking on streams and pessimistic locking on database resources with custom settlement commands on backend which read from the streams and settle the records in database , In a microservice system similar to this the questions i want to address are
 
 - **Q1-(Throughput)**
-is a python based matching engine's throughput efficient if not does a rewrite in c++ worth the extra effort?
+Under concurrent multi threaded sustained load , how does the the throughput and the queue waiting time for order scales as compared to the multi threaded c++ implementation
 - **Q2-(Algorithmic)**
-is python `heapq` based matching engine in python efficient as compared to c++?
+What is the difference between the throughput , P50 and P99 latency of a single threaded algorithmicly implemented python engine using `heapq`  over a c++ implemented engine implemented using `priority_queue`
 - **Q3-(Systems):**
 In the full HTTP request path, what percentage of end-to-end latency is attributable to the matching engine versus I/O and middleware overhead?
 
 ## Hypothesis
 **H1 — Throughput Hypothesis**
-> Under High concurent load upto (5000 RPS), the c++ and pybind11 implementation will fail to demonstrate a statistically significant throughput advantage over python native implementation. The overhead introduced by the FFI(foreign function interface) and unboxing of pydantic models into c++ data structures will mask the algorithmic speed of c++, resulting in I/O and serialization bottleneck
-
+> Under High concurent multi threaded load at engine level c++ implementation will yield exceptionally higher throughput as compared to multi threaded python engine because of Python Global Interpreter Lock , that will starve the threads and will force them to be processed sequentially not concurently, forcing the python throughput to be roughly equal to a single threaded engine.
 **H2 — Algorithmic Hypothesis**
 > A C++ order book implementation (exposed via pybind11) will exhibit lower matching latency than the Python `heapq` implementation. The speedup will increase with book depth due to memory locality and reduced allocation overhead.
 
@@ -64,6 +63,9 @@ For more indepth architectural decisions and nuances i would refer you to the RE
 
 ======================== [ SYNC BOUNDARY ] ========================
 
+## 3.1 Engine Implementation 
+Both engines implement price-time priority using binary heaps (O(log n) insertion and extraction). The Python engine stores full order tuples within the heapq structure, reflecting idiomatic Python patterns. The C++ engine employs an index-based heap where std::priority_queue stores 32-bit indices into a contiguous OrderMetadata vault, reflecting idiomatic C++ cache-optimization patterns. While this introduces a structural difference in memory layout, both implementations maintain identical algorithmic semantics: identical match sequences, identical partial-fill behavior, and identical tombstone cancellation. The performance differential therefore reflects both language-level execution efficiency and implementation-level memory-layout optimization.
+
 ## 4. Experimental Methodology
 In this section i will go over the experimental methodology and map out
 - **4.1- Independent Variables**
@@ -72,15 +74,60 @@ In this section i will go over the experimental methodology and map out
 - **4.4- Environment & Infrastructure**
 
 ### 4.1 Independent Variables
-These are the variables that will be manipulated throughout the benchmarking runs.
+Each research question has it's own experiment design and each question has it's own experimental matrix
 
-| **Variable** | **Levels** | **Constraints** |
-| :--- | :--- | :--- |
-| *Engine Implementation* | *Python* & *C++ with pybind11* | *Strict architectural parity enforced via dual-mode test suite* |
-| *Orderbook Depth* | *1k, 25k, 50k* | *Must be pre-seeded prior to measurement* |
-| *Request Rate* | *500, 2k, 5k* | *Use open model load* |
+### 4.1.1 Engine Throughput & Concurency Scaling
+For the benchmarking and answering question 1 , there will be no JWT, HTTP request , engine will be benchmarked strictly with concurent thread scaling for both c++ and python engine.
 
-#### 4.1.1 Cross-Engine Parity Methodology
+#### 4.1.1 Q1 — Engine Throughput 
+
+| **Variable** | **Levels** | **Notes** |
+|---|---|---|
+| *Engine Implementation* | *Python (`heapq`), C++ (`std::priority_queue` + pybind11)* | *Swapped via `ENGINE_MODE`* |
+| *Book Depth* | *1K, 25K, 50K resting orders* | *Pre-seeded before timer starts* |
+| *Thread Count* | *1, 2, 4* | *Each thread maintains a fixed injection rate* |
+| *Injection Rate (per thread)* | *10,0000 orders/sec* | *Fixed per thread; total load scales with thread count* |
+
+**Q1 Experimental Matrix:** 2 engines × 3 depths × 3 thread counts = **18 cells**
+
+**Total benchmark runs:** 18 cells × 5 trials = **90 runs**
+
+---
+
+#### 4.1.2 Q2 — Algorithmic Latency (Single-Thread)
+Pure single threaded latecny execution speed of python and c++ engine , sequential executionn of orders and measurement of P99, P50 and throughput.
+
+| **Variable** | **Levels** | **Notes** |
+|---|---|---|
+| *Engine Implementation* | *Python (`heapq`), C++ (`std::priority_queue` + pybind11)* | *Swapped via `ENGINE_MODE`* |
+| *Book Depth* | *1K, 25K, 50K resting orders* | *Pre-seeded before timer starts* |
+
+**Q2 Experimental Matrix:** 2 engines × 3 depths = **6 cells**
+
+**Total benchmark runs:** 6 cells × 5 trials = **30 runs**
+
+**What is held constant in Q2:**
+- Thread count = 1 (single-threaded by design)
+- Injection rate = sequential (one order at a time, no queue)
+- GC state = explicitly disabled around timing loop
+
+---
+
+#### 4.1.3 Q3 — Full API Path Latency
+End-to-end HTTP request through FastAPI, including JWT, Redis, matching, and stream push.
+
+| **Variable** | **Levels** | **Notes** |
+|---|---|---|
+| *Engine Implementation* | *Python (`heapq`), C++ (`std::priority_queue` + pybind11)* | *Swapped via `ENGINE_MODE`* |
+| *HTTP Request Rate* | *500, 2,000, 5,000 RPS* | Open-model load |
+
+**Q3 Experimental Matrix:** 2 engines × 3 request rates = **6 cells**
+
+**Total benchmark runs:** 6 cells × 5 trials = **30 runs**
+
+---
+
+#### 4.1.4 Cross-Engine Parity Methodology
 The constraint dictating that the C++ implementation must utilize similar semantics to the Python baseline is strictly enforced. This ensures that execution time differentials represent genuine architectural characteristics (e.g., memory management, FFI overhead) rather than algorithmic divergence. To guarantee this comparison, the project employs a rigorous parity validation framework:
 
 *   **Interface Unification:** Both implementations strictly adhere to a shared `EngineProtocol` gateway interface, ensuring identical method signatures and command-query separation.
@@ -89,25 +136,54 @@ The constraint dictating that the C++ implementation must utilize similar semant
 
 This parity validation neutralizes the risk of comparing structurally inequivalent logic, isolating the benchmark to measure purely the execution latency and memory constraints of the respective environments.
 
-*Depth and rate will be measured in 3x3 matrix , it gives us 9-cell experimental matrix and multiplied with our third independent variable engine it will be 18-cell experimental matrix*
-
 ### 4.2- Dependent Variables
-These are the variables which are our main concern , they will yield different values based on the variance of independent variables and they will form the result of this research
+These are the variables which are our main concern , they will yield different values based on the variance of independent variables and they will form the result of this research.
+Definition of **Throughput** changes depeneding upon the benchmarking stage.
+- **Question 1 (Throughput):** `For question 1, Throughput is the maximum number of orders processed by the engine per trial when all threads are concurently forcing the orders in the engine.`
+- **Question 2 (Throughput)** `For question 2, Throughput is the maximum number of orders processed per execution cycle and trial.`
 
-|**variables**|**Definition**|
-|-------------|--------------|
-|*Throughput*|*RPS at a specific latency threshold*|
-|*Execution Time*|*Time taken by an order to be executed algorithmically*|
-|*API response latency*|*Total time required by a request including JWT and dependency resolution*|
+Similarly P50 and P99 mmean  completely different things in Research Question 1 and 2
+- **Question 1 (P50 & P99):** `For Research question 1 P50 and P99 latency also includes the queue residence time , total time from order submission to order completion`
+- **Question 2 (P50 & P99):** `For Research question 2 P50 and P99 only include the service time which is how fast the ordered is processed in engine`
 
-### 4.3- Constant Variables
-These are the variables that should remain constant throughout the experimentation
+#### 4.2.1 Q1 — Throughput 
 
-|**variables**|**why**|
-|-------------|-------|
-|*Payload Schema*|*JSON size must remain constant*|
-|*Order composition Ratio*|*Limit order / Market Order ratio shall remain constant for each phase*|
-|*GC Collection State*|*Explicitly disabled for Phase 1 pure-engine tests; enabled for Phase 2 API tests*|
+| **Metric** | **Definition** |
+|---|---|
+| *Throughput* | *Total orders successfully processed by the engine divided by the 30-second recording window. Measured across all threads.* |
+| *Service Time p50 / p99* | *Time spent inside `process_order()` only. Excludes queue wait.* |
+| *Queue Residence Time p50 / p99* | *Total time from order submission (arrival at thread queue) to order completion.* |
+| *Queue Depth* | *Orders submitted minus orders processed, sampled every second.* |
+| *Saturation Point* | *The thread count at which throughput stops increasing between successive doublings.* |
+
+#### 4.2.2 Q2 — Algorithmic Latency
+
+| **Metric** | **Definition** |
+|---|---|
+| *Throughput* | *Total orders processed divided by wall-clock time using perf_counter()* |
+| *Execution Time p50 / p99* | *Time from entry to `process_order()` to return of trade results.* |
+
+#### 4.2.3 Q3 — End-to-End API Latency
+
+| *Metric* | *Definition* |
+|---|---|
+| *API Response Latency p50 / p99* | *Time from TCP request accepted to HTTP response sent. Includes JWT, Redis, matching, serialization, and stream push.* |
+| *Engine Contribution Ratio* | *`Q2 matching p99 / Q3 API p99` at identical engine mode. Shows what percentage of API latency is the engine itself.* |
+| *Error Rate* | *Percentage of 409 (Redis WATCH conflict) or 500 responses.* |
+| *Redis Consumer Group Lag* | *`XINFO GROUPS` lag after 60s of sustained load.* |
+
+
+### 4.3 Constant Variables (Held Constant Across All Questions)
+| *Variable* | *Fixed Value* | *Why* |
+|---|---|---|
+| *Payload Schema* | *Identical JSON structure for both engines | Prevents serialization bias* |
+| *Order Composition Ratio* | *70% Limit Orders, 30% Market Orders* | *Realistic flow; prevents all-immediate-fill or all-no-match artifacts* |
+| *Price Distribution* | *Ornstein-Uhlenbeck (μ=100, θ=0.10, σ=0.50)* | Mean-reverting; realistic spread |
+| *Precision Multiplier* | *`10^8`* | *Eliminates `Decimal` overhead; identical in both engines* |
+| *Seed* | *`SEED = 39`* | *Deterministic replay* |
+| *Trial Duration* | *30 seconds recording + 5,000 order warm-up* | *Warm-up is discarded* |
+| *Repetitions* | *5 independent trials per cell* | *Statistical power for Mann-Whitney U* |
+| *State Sterilization* | *`reset_engine()` + `gc.collect()` + `FLUSHALL` between trials* | *Eliminates cross-trial contamination* |
 
 ### 4.4 Environment & Infrastructure
 To ensure reproducible latency measurements , all benchmarking are done on a dedicated local compute node.
@@ -147,23 +223,27 @@ Containerized application and the containers for specific services are pinnned t
 Due to host machine being a Windows operating system , and limitation of docker on the windows the network directive `--network host` will not fully bypass the NAT (Network Address Translation).
 Consequently the API response latency will include the network overhead.
 To maximize the throughput with these constraints
-- **File Descriptors:** *The open file descriptor limit within the WSL2 kernel is elevated to 65,535 `(ulimit -n 65535)` to prevent socket exhaustion during peak Request Per Second (RPS) loads*
+- **File Descriptors:** *The open file descriptor limit within the WSL2 kernel is elevated to 65,535 `(ulimit -n 65535)` to prevent socket exhaustion during peak order arrival loads*
 
 #### 4.4.4 Warm-up Protocol and Sampling
 In this section, warm-up and sampling for the research are explained:
 
 - **Warm-Up Phase:** *Prior to recording telemetry for any experimental cell, an untimed warm-up load of 5,000 requests is executed to pre-prime the chunk slab allocator and cache pools. Data generated during this phase is explicitly discarded.*
-- **Sample Size (N) and Duration:** *Each of the 18 experimental cells is executed across N = 5 independent test trials. To capture potential queue degradation, each trial sustains the target request rate for exactly 30 seconds.*
+- **Sample Size (N) and Duration:** *Each of the experimental cells for the corresponding research question is executed across N = 5 independent test trials. To capture potential queue degradation, each trial sustains the target request rate for exactly 30 seconds.*
 - **Reset & State Sterilization:** *Between individual trials, a multi-tier hard reset protocol is executed to guarantee an absolute zero-state environment across the entire stack:*
   1. ***C++ Engine Layer:** The `OrderBook::reset_engine()` routine frees all active heap pointers via the authoritative tracking vault, forces immediate capacity deallocation of priority queues and the metadata vector using the STL swap idiom, and resets the chunk slab allocator via an O(1) pointer-offset rewind (`ArenaAllocator::reset()`).*
   2. ***Python & Application Layer:** Explicit garbage collection (`gc.collect()`) is forced to eliminate cyclic references.*
   3. ***Storage & Caching Layer:** A full Redis cache flush (`FLUSHALL`).
+
+- **GIL Release:** *Prior to Q1 benchmarking, a sanity test confirms that the C++ process_order binding releases the Python GIL. This is verified by spawning two threads that simultaneously call the C++ engine and confirming that wall-clock execution time is approximately halved compared to sequential execution*
 
 ### 4.4.5 Statistical Significance and Non parametric Testing
 Due to the right-skewed nature of network latency, central tendencies will be compared using the non-parametric Mann-Whitney U test a = 0.05, and tail latencies p99 will be evaluated using bootstrapped 95% confidence intervals
 
 ### 4.5 Synthetic Order Generation
 To guarantee deterministic execution and identical orders for each implementation, the order flow is pre generated and saved to disk prior to benchmarking
+
+
 ### 4.5.1 Generation
 Order sequences are synthesized using a predefined pseudorandom number generator (PRNG) initialized with a static global seed (SEED = 39).
 - **Price Distribution:** *Prices are generated by using a discreet-time **Ornstein-Uhlenbeck process**, gaussian random walk anchored around 100, standard deviation is tuned to maintain a realistic spread and simulate high frequency behaviour. Price may fluctuate from the base 100 but it will keep reverting back to the base price mimicking the real world asset price fluctuation*
