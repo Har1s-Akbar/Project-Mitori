@@ -63,7 +63,8 @@ For more indepth architectural decisions and nuances i would refer you to the RE
 
 ======================== [ SYNC BOUNDARY ] ========================
 
-
+## 3.1 Engine Implementation 
+Both engines implement price-time priority using binary heaps (O(log n) insertion and extraction). The Python engine stores full order tuples within the heapq structure, reflecting idiomatic Python patterns. The C++ engine employs an index-based heap where std::priority_queue stores 32-bit indices into a contiguous OrderMetadata vault, reflecting idiomatic C++ cache-optimization patterns. While this introduces a structural difference in memory layout, both implementations maintain identical algorithmic semantics: identical match sequences, identical partial-fill behavior, and identical tombstone cancellation. The performance differential therefore reflects both language-level execution efficiency and implementation-level memory-layout optimization.
 
 ## 4. Experimental Methodology
 In this section i will go over the experimental methodology and map out
