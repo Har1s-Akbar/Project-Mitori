@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <string>
+#include <mutex>
 
 #include "utility_class.hpp"
 
@@ -16,9 +17,11 @@ private:
     
     inline static size_t current_slab = 0;
     inline static size_t current_offset = 0;
-
+    inline static std::mutex allocation_mutex;
 public:
     static uint32_t allocate_index() {
+        std::lock_guard<std::mutex> lock(allocation_mutex);
+
         if (slabs.empty()) {
             slabs.push_back(new Order[SLAB_SIZE]);
         }
@@ -44,11 +47,13 @@ public:
     }
 
     static void reset() {
+        std::lock_guard<std::mutex> lock(allocation_mutex);
         current_slab = 0;
         current_offset = 0;
     }
 
     static void cleanup() {
+        std::lock_guard<std::mutex> lock(allocation_mutex);
         for (Order* slab : slabs) {
             delete[] slab;
         }

@@ -147,17 +147,17 @@ def run_benchmark_for_tier(tier_name: str, seed_file_path: str, raw_active_strea
 
 def main():
     print("Loading 200,000 active stream orders into memory...")
-    raw_active_stream = load_json("benchmark/data/active_stream.json")
+    raw_active_stream = load_json("benchmark/data/data_for_test/active_stream.json")
 
     # active_stream = [unbox_order(order) for order in raw_active_stream]
 
     timestamp = int(time.time())
-    csv_filename = f"benchmark/data/python_baseline_{timestamp}.csv"
+    csv_filename = f"benchmark/data/python_test_data/python_baseline_{timestamp}.csv"
     
     tiers = [
-        ("1k", "benchmark/data/seed_1k.json"),
-        ("25k", "benchmark/data/seed_25k.json"),
-        ("50k", "benchmark/data/seed_50k.json")
+        ("1k", "benchmark/data/data_for_test/seed_1k.json"),
+        ("25k", "benchmark/data/data_for_test/seed_25k.json"),
+        ("50k", "benchmark/data/data_for_test/seed_50k.json")
     ]
     
     for tier_name, filepath in tiers:
