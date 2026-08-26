@@ -36,8 +36,9 @@ build/
 .DS_Store
 Thumbs.db
 
-benchmark/data/*.json
-benchmark/data/*_RAW.csv
+benchmark/data/data_for_test/*.json
+benchmark/data/python_test_data/*_RAW.csv
+benchmark/data/cpp_test_data/*_RAW.csv
 
 # C++ Test Executables
 test_engine.exe
