@@ -69,6 +69,7 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
                         }
                         return book.process_order(order_index);
         },
+            py::call_guard<py::gil_scoped_release>(),
             py::arg("order_id_high"),
             py::arg("order_id_low"),
             py::arg("order_owner_id_high"),
@@ -116,7 +117,7 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
                 
                 batch_indices.push_back(order_index);
             }
-
+            py::gil_scoped_release release;
             //Implementing and replacing the chrono with intrinsic TSC register read.
             auto t1 = std::chrono::high_resolution_clock::now();
             unsigned int aux;
@@ -158,7 +159,7 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
 
         .def("tombstone_delete", [](OrderBook& book, uint64_t order_id_high, uint64_t order_id_low)-> py::object {
             unsigned __int128 full_order_id = (static_cast<unsigned __int128>(order_id_high) << 64) | order_id_low;
-
+            py::gil_scoped_release release;
             Order* canceled_order = book.tombstone_delete(full_order_id);
 
             if(!canceled_order){
