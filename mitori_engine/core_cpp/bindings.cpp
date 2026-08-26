@@ -186,5 +186,5 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
         )
         .def("get_current_bbo", &OrderBook::get_current_bbo, py::call_guard<py::gil_scoped_release>())
         .def("reset_engine", &OrderBook::reset_engine, py::call_guard<py::gil_scoped_release>());
-        m.def("cleanup_memory", &ArenaAllocator::cleanup, py::call_gaurd<py::gil_scoped_release>());
+        m.def("cleanup_memory", &ArenaAllocator::cleanup, py::call_guard<py::gil_scoped_release>());
 }
