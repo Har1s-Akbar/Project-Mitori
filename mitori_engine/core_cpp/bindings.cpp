@@ -154,6 +154,7 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
             py::arg("warmup_count") = 5000)
 
         .def("get_book_depth", [](OrderBook &book) {
+            py::gil_scoped_release release;
             return book.get_book_depth();
         })
 
@@ -183,7 +184,7 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
             py::arg("order_id_high"),
             py::arg("order_id_low")
         )
-        .def("get_current_bbo", &OrderBook::get_current_bbo, py::call_guard<gil_scoped_release>())
-        .def("reset_engine", &OrderBook::reset_engine, py::call_guard<gil_scoped_release>());
-        m.def("cleanup_memory", &ArenaAllocator::cleanup, py::call_gaurd<gil_scoped_release>());
+        .def("get_current_bbo", &OrderBook::get_current_bbo, py::call_guard<py::gil_scoped_release>())
+        .def("reset_engine", &OrderBook::reset_engine, py::call_guard<py::gil_scoped_release>());
+        m.def("cleanup_memory", &ArenaAllocator::cleanup, py::call_gaurd<py::gil_scoped_release>());
 }
