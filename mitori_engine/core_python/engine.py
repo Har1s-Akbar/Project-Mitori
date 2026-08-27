@@ -3,6 +3,7 @@ from .models import Order, Trade, Side, Type
 from uuid import UUID
 import os
 import gc
+import threading
 
 class OrderBook():
     ticker: str
@@ -14,14 +15,17 @@ class OrderBook():
         self.active_uuids = {}
         self.canceled_uuids = set()
         self.PRECISION_MULTIPLIER = int(os.getenv('SYSTEM_PRECISION_MULTIPLIER', '100000000'))
+        self.lock = threading.Lock()
 
     def process_order(self, order: Order) -> list[Trade]:
-        if order.type == Type.LIMIT.value: 
-            self.add_order(order)
-            return self.execute()
+        if order.type == Type.LIMIT.value:
+            with self.lock:
+                self.add_order(order)
+                return self.execute()
             
         if order.type == Type.MARKET.value or getattr(order.type, "value", order.type) == Type.MARKET.value:
-            return self.process_market_orders_ioc(order)
+            with self.lock:
+                return self.process_market_orders_ioc(order)
 
     def process_market_orders_ioc(self, order: Order) -> list[Trade]:
         executed_trades = []
@@ -132,45 +136,48 @@ class OrderBook():
         return trades_executed
 
     def tombstone_delete(self, order_uuid : UUID):
-        order_id_str = str(order_uuid)
-        order_delete = self.active_uuids.pop(order_id_str, None)
-        
-        if order_delete:
-            order_delete.is_canceled = True
-            self.canceled_uuids.add(order_id_str)
-            return order_delete
-        else:
-            return False
+        with self.lock:
+            order_id_str = str(order_uuid)
+            order_delete = self.active_uuids.pop(order_id_str, None)
+            
+            if order_delete:
+                order_delete.is_canceled = True
+                self.canceled_uuids.add(order_id_str)
+                return order_delete
+            else:
+                return False
 
     def get_specific_order_by_id(self, order_uuid):
-        return self.active_uuids.get(str(order_uuid), None)
+        with self.lock:
+            return self.active_uuids.get(str(order_uuid), None)
 
     def get_current_bbo(self) -> dict:
-        best_ask = None
-        best_bid = None
-        
-        while self.ask:
-            top_ask = self.ask[0][3]
-            if str(top_ask.order_id) not in self.canceled_uuids:
-                best_ask = top_ask.price
-                break
-            else:
-                heapq.heappop(self.ask)
-                self.canceled_uuids.remove(str(top_ask.order_id))
+        with self.lock:
+            best_ask = None
+            best_bid = None
+            
+            while self.ask:
+                top_ask = self.ask[0][3]
+                if str(top_ask.order_id) not in self.canceled_uuids:
+                    best_ask = top_ask.price
+                    break
+                else:
+                    heapq.heappop(self.ask)
+                    self.canceled_uuids.remove(str(top_ask.order_id))
 
-        while self.bid:
-            top_bid = self.bid[0][3]
-            if str(top_bid.order_id) not in self.canceled_uuids:
-                best_bid = top_bid.price
-                break
-            else:
-                heapq.heappop(self.bid)
-                self.canceled_uuids.remove(str(top_bid.order_id))
+            while self.bid:
+                top_bid = self.bid[0][3]
+                if str(top_bid.order_id) not in self.canceled_uuids:
+                    best_bid = top_bid.price
+                    break
+                else:
+                    heapq.heappop(self.bid)
+                    self.canceled_uuids.remove(str(top_bid.order_id))
 
-        return {
-            "best_ask_price" : best_ask if best_ask else int(0),
-            "best_bid_price" : best_bid if best_bid else int(0)
-        }
+            return {
+                "best_ask_price" : best_ask if best_ask else int(0),
+                "best_bid_price" : best_bid if best_bid else int(0)
+            }
 
     def reset_engine(self):
         self.bid = []

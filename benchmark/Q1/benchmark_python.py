@@ -17,6 +17,8 @@ WARMUP_COUNT = 5000
 DURATION_SEC = 30
 THREADS = [1, 2, 4]
 
+RING_BUFFER_SIZE = 600000
+
 def load_json(filepath: str) -> list:
     with open(filepath, "rb") as f:
         return orjson.loads(f.read())
@@ -39,25 +41,31 @@ def log_q1_to_csv(filepath: str, data_row: list):
 
 def q1_worker(engine: OrderBook, orders: list) -> tuple[np.ndarray, np.ndarray, int]:
     """Injects at 10k RPS and records independent service/queue latencies."""
+    gc.disable()
+
     interval_ns = 1_000_000_000 // TARGET_RPS_PER_THREAD
+    buffer_size = len(orders)
     
-    # Warmup
-    for order in orders[:WARMUP_COUNT]:
-        engine.process_order(order)
-        
-    measurement_orders = orders[WARMUP_COUNT:]
-    num_orders = len(measurement_orders)
-    
-    service_times = np.zeros(num_orders, dtype=np.int64)
-    queue_times = np.zeros(num_orders, dtype=np.int64)
+    for order in range(WARMUP_COUNT):
+        engine.process_order(orders[order% buffer_size])
+
+    max_expected_orders = int(TARGET_RPS_PER_THREAD*DURATION_SEC*1.1)
+
+    service_times = np.zeros(max_expected_orders, dtype=np.int64)
+    queue_times = np.zeros(max_expected_orders, dtype=np.int64)
     
     process = engine.process_order
     start_wall = time.perf_counter_ns()
-    
+    end_wall = start_wall + (DURATION_SEC *  1_000_000_000)
     processed_count = 0
-    for i in range(num_orders):
-        order = measurement_orders[i]
-        expected_arrival = start_wall + (i * interval_ns)
+
+    while time.perf_counter_ns() < end_wall:
+        if processed_count >= max_expected_orders:
+            break
+        order_idx = (WARMUP_COUNT + processed_count) % buffer_size
+        order = orders[order_idx]
+        
+        expected_arrival = start_wall + (processed_count * interval_ns)
         
         while time.perf_counter_ns() < expected_arrival:
             pass
@@ -66,19 +74,18 @@ def q1_worker(engine: OrderBook, orders: list) -> tuple[np.ndarray, np.ndarray, 
         process(order)
         completion_time = time.perf_counter_ns()
         
-        service_times[i] = completion_time - arrival_time
-        queue_times[i] = completion_time - expected_arrival
+        service_times[processed_count] = completion_time - arrival_time
+        queue_times[processed_count] = completion_time - expected_arrival
         processed_count += 1
-        
-        if (completion_time - start_wall) > (DURATION_SEC * 1_000_000_000):
-            break
+            
+    gc.enable()
             
     return service_times[:processed_count], queue_times[:processed_count], processed_count
 
 def run_q1_matrix():
-    print("Loading 350000 active stream orders...")
+    print("Loading 4000000 active stream orders...")
     raw_active_stream = load_json("benchmark/data/data_for_test/active_stream_for_q1.json")
-    active_stream = [unbox_order(order) for order in raw_active_stream]
+    active_stream = [unbox_order(order) for order in raw_active_stream[:RING_BUFFER_SIZE]]
     
     csv_filename = f"benchmark/data/python_test_data/python_q1_throughput_{int(time.time())}.csv"
     
@@ -106,7 +113,6 @@ def run_q1_matrix():
                     futures = [executor.submit(q1_worker, engine, active_stream) for _ in range(thread_count)]
                     results = [f.result() for f in concurrent.futures.as_completed(futures)]
                 
-                # Aggregate results across threads
                 all_service = np.concatenate([r[0] for r in results])
                 all_queue = np.concatenate([r[1] for r in results])
                 total_processed = sum(r[2] for r in results)

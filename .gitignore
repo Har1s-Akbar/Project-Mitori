@@ -39,6 +39,7 @@ Thumbs.db
 benchmark/data/data_for_test/*.json
 benchmark/data/python_test_data/*_RAW.csv
 benchmark/data/cpp_test_data/*_RAW.csv
+docs/RESEARCH_LOG/research_log_python_Q1.md
 
 # C++ Test Executables
 test_engine.exe

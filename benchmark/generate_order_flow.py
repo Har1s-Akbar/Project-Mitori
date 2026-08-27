@@ -66,7 +66,7 @@ def generate_resting_book():
 def generate_active_stream():
     streams =[
         {"name":"active_stream", "order_numbers":200_000},
-        {"name":"active_stream_for_q1", "order_numbers":350_000}
+        {"name":"active_stream_for_q1", "order_numbers":600_000}
     ]
     for stream in streams:
         prices = ornstein_Uhlenbeck_price(stream['order_numbers'])
