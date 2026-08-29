@@ -177,7 +177,7 @@ Similarly P50 and P99 mmean  completely different things in Research Question 1 
 | *Variable* | *Fixed Value* | *Why* |
 |---|---|---|
 | *Payload Schema* | *Identical JSON structure for both engines | Prevents serialization bias* |
-| *Order Composition Ratio* | *70% Limit Orders, 30% Market Orders* | *Realistic flow; prevents all-immediate-fill or all-no-match artifacts* |
+| *Order Composition Ratio* | *50% Limit Orders, 50% Market Orders* | *Realistic flow; prevents all-immediate-fill or all-no-match artifacts* |
 | *Price Distribution* | *Ornstein-Uhlenbeck (μ=100, θ=0.10, σ=0.50)* | Mean-reverting; realistic spread |
 | *Precision Multiplier* | *`10^8`* | *Eliminates `Decimal` overhead; identical in both engines* |
 | *Seed* | *`SEED = 39`* | *Deterministic replay* |
@@ -251,7 +251,7 @@ Order sequences are synthesized using a predefined pseudorandom number generator
 - *Mean reversion rate = theta =0.10*
 - *Standard deviation = sigma = 0.50*
 *Note- OU gaurantees that price and orders will cluster around our base price because of our defined theta , the bigger the theta the more hard it is for price to drift apart  on contrary if it is less price is allowed to move far but it eventually comes back to the base price(specifically OU model)*
-- **Order Composition:** *The flow maintains a strict ratio of 70% Limit Orders to 30% Market Orders.*
+- **Order Composition:** *The flow maintains a strict ratio of 50% Limit Orders to 50% Market Orders.*
 - **Side Distribution:** *Buy and Sell sides are uniformly distributed (50/50 probability).*
 
 ### 4.5.2 Replay
