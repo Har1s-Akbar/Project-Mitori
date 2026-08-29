@@ -51,24 +51,10 @@ def log_snapshots_to_csv(filepath: str, depth: str, threads: int, trial: int, sn
                 depth, 
                 threads, 
                 trial, 
-                snapshots[i, 0], # Elapsed seconds
-                snapshots[i, 1], # Bids count
-                snapshots[i, 2]  # Asks count
+                snapshots[i, 0], 
+                snapshots[i, 1], 
+                snapshots[i, 2]  
             ])
-
-# --- Inside run_q1_matrix() ---
-# snapshot_csv = f"benchmark/data/python_test_data/python_q1_snapshots_{int(time.time())}.csv"
-
-# # ... inside your trial loop after concurrent.futures finishes ...
-
-# # Extract standard telemetry
-# all_service = np.concatenate([r[0] for r in results])
-# # ... (your existing percentile calculations)
-
-# # Extract and log the snapshots from the FIRST thread only
-# thread_0_snapshots = results[0][3]
-# thread_0_snap_count = results[0][4]
-# log_snapshots_to_csv(snapshot_csv, tier_name, thread_count, trial, thread_0_snapshots, thread_0_snap_count)
 
 def q1_worker(engine: OrderBook, orders: list) -> tuple[np.ndarray, np.ndarray, int, np.ndarray, int]:
     """Injects at 10k RPS and records independent service/queue latencies."""
@@ -104,8 +90,8 @@ def q1_worker(engine: OrderBook, orders: list) -> tuple[np.ndarray, np.ndarray, 
         current_time = time.perf_counter_ns()
         if current_time >= next_snapshot and snapshot_index < total_snapshots:
             snapshot_array[snapshot_index, 0] = (current_time - start_wall) // 1_000_000_000
-            snapshot_array[snapshot_index, 1] = len(engine.bids)
-            snapshot_array[snapshot_index, 2] = len(engine.asks)
+            snapshot_array[snapshot_index, 1] = len(engine.bid)
+            snapshot_array[snapshot_index, 2] = len(engine.ask)
             
             snapshot_index += 1
             next_snapshot += snapshot_interval
