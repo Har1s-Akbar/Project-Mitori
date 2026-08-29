@@ -12,8 +12,8 @@ from mitori_engine.core_python.models import Order
 
 N_TRIALS = 5
 PRECISION_MULTIPLIER = Decimal('100000000')
-TARGET_RPS_PER_THREAD = 10000
-WARMUP_COUNT = 5000
+TARGET_RPS_PER_THREAD = 600000
+WARMUP_COUNT = 50000
 DURATION_SEC = 30
 THREADS = [1, 2, 4]
 
@@ -83,7 +83,7 @@ def q1_worker(engine: OrderBook, orders: list) -> tuple[np.ndarray, np.ndarray, 
     return service_times[:processed_count], queue_times[:processed_count], processed_count
 
 def run_q1_matrix():
-    print("Loading 4000000 active stream orders...")
+    print("Loading active stream orders...")
     raw_active_stream = load_json("benchmark/data/data_for_test/active_stream_for_q1.json")
     active_stream = [unbox_order(order) for order in raw_active_stream[:RING_BUFFER_SIZE]]
     
