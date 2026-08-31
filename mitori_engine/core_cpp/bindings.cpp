@@ -45,6 +45,7 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
                     uint64_t price,
                     uint64_t number_of_shares,
                     std::optional<uint64_t> max_authorized_funds){
+                        std::lock_guard<std::mutex> lock(book.engine_mutex);
                         
                         uint32_t order_index = ArenaAllocator::allocate_index();
                         Order* order = ArenaAllocator::get_order(order_index);
@@ -118,6 +119,7 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
                 batch_indices.push_back(order_index);
             }
             py::gil_scoped_release release;
+            std::lock_guard<std::mutex> lock(book.engine_mutex);
             //Implementing and replacing the chrono with intrinsic TSC register read.
             auto t1 = std::chrono::high_resolution_clock::now();
             unsigned int aux;
@@ -155,12 +157,26 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
 
         .def("get_book_depth", [](OrderBook &book) {
             py::gil_scoped_release release;
+            std::lock_guard<std::mutex> lock(book.engine_mutex);
             return book.get_book_depth();
+        })
+
+        .def("get_bid_length", [](OrderBook &book) {
+            py::gil_scoped_release release;
+            std::lock_guard<std::mutex> lock(book.engine_mutex);
+            return book.get_bid_length();
+        })
+
+        .def("get_ask_length", [](OrderBook &book) {
+            py::gil_scoped_release release;
+            std::lock_guard<std::mutex> lock(book.engine_mutex);
+            return book.get_ask_length();
         })
 
         .def("tombstone_delete", [](OrderBook& book, uint64_t order_id_high, uint64_t order_id_low)-> py::object {
             unsigned __int128 full_order_id = (static_cast<unsigned __int128>(order_id_high) << 64) | order_id_low;
             py::gil_scoped_release release;
+            std::lock_guard<std::mutex> lock(book.engine_mutex);
             Order* canceled_order = book.tombstone_delete(full_order_id);
 
             if(!canceled_order){

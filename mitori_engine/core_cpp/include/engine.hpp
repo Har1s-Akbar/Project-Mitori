@@ -90,6 +90,7 @@ private:
     std::unordered_set<unsigned __int128, Int128Hash> canceled_orders;
 
 public:
+    std:: mutex engine_mutex;
     explicit OrderBook(std::string ticker);
     
     std::vector<OrderMetadata> metadata_vault; 
@@ -106,6 +107,9 @@ public:
     std::unordered_map<std::string, uint64_t> get_current_bbo();
     
     uint64_t get_book_depth();
+
+    uint64_t get_bid_length();
+    uint64_t get_ask_length();
 
     void reset_engine();
 };
