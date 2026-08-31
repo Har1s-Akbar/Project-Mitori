@@ -98,4 +98,75 @@ The most striking anomaly is the performance disparity across depths. Even on a 
 
 This exposes a fundamental flaw in Python's memory management when dealing with market microstructure:
 * **The 25k/50k State (Matching):** Deep liquidity allows the active stream to cross the spread and match orders continuously. This results in O(1) popping from the book. The memory footprint remains stable and highly performant.
-* **The 1k State (Stacking & Array Thrashing):** A shallow book is vaporized by a 600k RPS injection rate in milliseconds. Once the liquidity dries up, the engine stops matching and begins strictly *stacking* limit orders.
+* **The 1k State (Stacking & Array Thrashing):** A shallow book is vaporized by a 600k RPS injection rate in milliseconds. Once the liquidity dries up, the engine stops matching and begins strictly *stacking* limit orders. While the liquidity dries and the coming orders are stacked inside the heapq , instead of matching the queue residence time explodes for 1k order book depth as compared to the 25k and 50k order book depth.
+
+### Hypothesis
+Hypothesis for the throughput dropping for the 1k order book depth and scaling for the 25k and 50k order book depth is that
+- **Liquidity Collapsing:** 1k order book does not have enough resting liquidity to properly handle 600k order injection and the resting liquidity is vaporized immediately , then the rest of the orders that are being injected starts stacking up in the `heapq`
+- **Stacking not matching:** 1k order book depth spends more time stacking the order and managing the memory , the memory buffers and allocating contiguous memory locations , shifting and adjusting the `heapq` binary tree structure.
+- **contiguous memory Allocation:** Whena orders are being pushed into the heap and are not being matched , mathematically `heappush` is O(Log N), it is backed by the Python `List` , appending to the list is O(1) most of the times, but when an increasing flux of coming orders are being stored in the list , the underlying C-array runs out of memory , for that reason python must pause the execution of the thread and allocate a massive chunk of the memory and then execute a c-level `memcpy` to move all the existing pointers to new allocated memory , cauing a memory disperancy and halt , dropping the throughput further more.
+
+### Proper Dignosis 
+For the proper dignosis of this phenomenon , a three second snapshot of the each telemetry will be implemented , which will output the size of the ask and bid at an interval of 3 seconds , this will verify the hypothesis. Expectaation for the 3 seocnd snapshot of the telemetry is 
+- **1k order book depth:** 1K order book depth will exhibit a high difference in numbers of ask and bid , one of the side will grow while other will remain marginal.
+- **25k &  50k order book depth:** both sides will scale and increase maintaining a linear relationship.
+
+## Final Benchmarking (Ran - August 29th)
+
+## 1. Aggregated Benchmark Telemetry
+The following table represents the mean values aggregated across 5 trials for each Depth and Thread configuration under a 600,000 RPS closed-loop injection schedule.
+
+| Depth | Threads | Throughput_RPS | Service_P50_ns | Service_P99_ns | Queue_P50_ns | Queue_P99_ns |
+|:---|---:|---:|---:|---:|---:|---:|
+| **1k** | 1 | 254,805 | 1,979 | 5,616 | 8,397,370,201 | 17,045,661,625 |
+| **1k** | 2 | 223,564 | 2,082 | 6,921 | 12,369,286,870 | 24,091,384,736 |
+| **1k** | 4 | 138,838 | 2,968 | 14,282 | 14,952,168,239 | 26,490,415,874 |
+| **25k** | 1 | 304,195 | 2,537 | 8,740 | 7,786,787,999 | 14,675,813,681 |
+| **25k** | 2 | 358,541 | 2,184 | 6,647 | 10,555,139,171 | 20,822,878,318 |
+| **25k** | 4 | 362,930 | 2,088 | 7,540 | 13,270,102,971 | 25,136,476,176 |
+| **50k** | 1 | 413,271 | 1,989 | 4,855 | 4,111,088,914 | 9,202,555,215 |
+| **50k** | 2 | 387,832 | 2,034 | 5,944 | 9,195,578,066 | 19,873,841,449 |
+| **50k** | 4 | 362,799 | 2,084 | 6,955 | 13,051,655,311 | 25,112,150,062 |
+
+## 2. Aggregated Order Book Snapshots (Thread = 1)
+To observe the internal state of the order book arrays, we aggregated the snapshot data across the 5 trials for the 1-Thread runs at the beginning (3s), middle (15s), and end (27s) of the benchmark.
+
+| Depth | Elapsed | Mean Bids Count | Mean Asks Count | Book State |
+|:---|---:|---:|---:|:---|
+| **1k** | 3s | 27,242 | 197,383 | Imbalanced |
+| **1k** | 15s | 6,614 | 946,846 | **Bid Collapse** |
+| **1k** | 27s | 27,746 | 1,689,933 | **Unilateral Bloat** |
+| **25k** | 3s | 243,308 | 245,391 | Balanced |
+| **25k** | 15s | 1,146,131 | 1,149,848 | Balanced |
+| **25k** | 27s | 2,072,550 | 2,081,274 | **Bilateral Bloat** |
+| **50k** | 3s | 347,926 | 348,785 | Balanced |
+| **50k** | 15s | 1,646,366 | 1,651,623 | Balanced |
+| **50k** | 27s | 2,845,611 | 2,855,327 | **Bilateral Bloat** |
+
+---
+
+## 3. Findings and Analysis
+
+### The Distinction Between "Depth" and "Liquidity"
+This data provides a strict mechanical definition separating the initial state of the book (*Depth*) from its ability to survive an active stream (*Liquidity*).
+*   **Depth** is simply the seed size of the arrays before the benchmark begins (1,000 vs. 25,000 vs. 50,000 orders).
+*   **Liquidity** is the engine's ability to maintain a functional bid-ask spread under extreme load. 
+
+The snapshot data verifies the hypothesis: **The 1k order book lacks the liquidity required to survive a 600k RPS active stream.** 
+Because there are too few resting orders, the active stream vaporizes the Bid side almost immediately (dropping to 0 or near 0 consistently). Once the bids are depleted, the spread breaks. Incoming active sell orders have nothing to match against, forcing the engine into a state of *Unilateral Bloat*, where the Ask array absorbs a massive, unmatched stack of nearly 1.7 million limit orders.
+
+Conversely, the 25k and 50k books possess enough initial mass to maintain bilateral liquidity. Both the Bid and Ask arrays grow symmetrically (reaching ~2.8 million orders at 50k depth). Because neither side ever hits zero, the spread remains intact, allowing the engine to continuously match and cross orders rather than strictly stacking them on one side.
+
+### Throughput Degradation & Queue Residence
+The collapse of liquidity directly impacts the Python Global Interpreter Lock (GIL) and total system throughput:
+
+1.  **50k Depth (High Liquidity):** Showcases the highest absolute performance, processing **413,271 RPS** on a single thread. Because the throughput is so high, the Queue Residence P99 is kept relatively low at **9.20 seconds**. The engine only scales negatively under 4 threads (dropping to 362,799 RPS) due to standard GIL context-switching overhead.
+2.  **1k Depth (Liquidity Collapse):** Showcases severe performance degradation. On a single thread, it can only process **254,805 RPS**. Furthermore, it scales catastrophically poorly under 4 threads, dropping to an abysmal **138,838 RPS**. Because the engine is processing so slowly compared to the 600k injection rate, the Queue P99 residence time skyrockets to **26.49 seconds**. 
+
+**Conclusion:** The data proves unequivocally that the Python engine's throughput is tied directly to order book liquidity. 
+- When the 1k book loses its spread, the engine stops executing trades and falls into a one-sided stacking loop. This state aggravates the Python GIL and memory allocator, causing massive lock contention, tanking throughput by over 45%, and causing queue latencies to explode.
+- On the other hand **25k & 50k** order book depth's bid and ask is increasing with each second, but since both the sides are more or less equivalent , the orders are being matched instead of being stacked, this explains the
+- Efficient queue residence time of 50k and 25k order book depth.
+- Higher Throughput of the 50k and 25k order book depth as compared to 1k.
+
+Confirming the Hypothesis of *liquidity Collapsing and stacking not matching* and refuting the contiguous memory allocation , even tho contiguous memory allocation phenomenon is true but by observing the 3-second snapshot telemetry , it is evident that further down the benchmarking 25k and 50k order book depths are experiencing more order flux in both asks and bids array.
