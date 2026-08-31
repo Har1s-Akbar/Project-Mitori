@@ -7,9 +7,20 @@
 #include "../include/utility_class.hpp"
 #include <x86intrin.h>
 #include <thread>
+#include <pybind11/numpy.h>
 
 namespace py = pybind11;
 
+struct RawOrderData {
+    unsigned __int128 full_order_id;
+    unsigned __int128 full_owner_id;
+    Type type;
+    Side side;
+    bool is_canceled;
+    uint64_t price;
+    uint64_t number_of_shares;
+    uint64_t max_authorized_funds;
+};
 
 PYBIND11_MODULE(mitori_engine_cpp, m){
     m.doc() = "Mitori Engine Python Bindings- C++ to python bridge";
@@ -154,6 +165,108 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
         
             py::arg("orders_list"), 
             py::arg("warmup_count") = 5000)
+            
+        .def("benchmark_closed_loop", [](OrderBook & book, py::dict numpy_orders, uint64_t target_rps_per_thread, uint64_t duration_sec, size_t warmup_count) {
+            auto arr_oid_h = numpy_orders["order_id_high"].cast<py::array_t<uint64_t>>().unchecked<1>();
+            auto arr_oid_l = numpy_orders["order_id_low"].cast<py::array_t<uint64_t>>().unchecked<1>();
+            auto arr_own_h = numpy_orders["order_owner_id_high"].cast<py::array_t<uint64_t>>().unchecked<1>();
+            auto arr_own_l = numpy_orders["order_owner_id_low"].cast<py::array_t<uint64_t>>().unchecked<1>();
+            auto arr_side = numpy_orders["side"].cast<py::array_t<uint8_t>>().unchecked<1>();
+            auto arr_type = numpy_orders["type"].cast<py::array_t<uint8_t>>().unchecked<1>();
+            auto arr_iscanc = numpy_orders["is_canceled"].cast<py::array_t<bool>>().unchecked<1>();
+            auto arr_price = numpy_orders["price"].cast<py::array_t<uint64_t>>().unchecked<1>();
+            auto arr_shares = numpy_orders["number_of_shares"].cast<py::array_t<uint64_t>>().unchecked<1>();
+            auto arr_max_f = numpy_orders["max_authorized_funds"].cast<py::array_t<uint64_t>>().unchecked<1>();
+
+            size_t num_orders = arr_oid_h.shape(0);
+            std::vector<RawOrderData> active_stream_cache;
+            active_stream_cache.reserve(num_orders);
+
+            for (size_t i = 0; i < num_orders; ++i) {
+                RawOrderData raw;
+                raw.full_order_id = (static_cast<unsigned __int128>(arr_oid_h(i)) << 64) | arr_oid_l(i);
+                raw.full_owner_id = (static_cast<unsigned __int128>(arr_own_h(i)) << 64) | arr_own_l(i);
+                raw.type = static_cast<Type>(arr_type(i));
+                raw.side = static_cast<Side>(arr_side(i));
+                raw.is_canceled = arr_iscanc(i);
+                raw.price = arr_price(i);
+                raw.number_of_shares = arr_shares(i);
+                raw.max_authorized_funds = arr_max_f(i);
+                active_stream_cache.push_back(raw);
+            }
+
+            uint64_t interval_ns = 1'000'000'000 / target_rps_per_thread;
+            uint64_t max_expected_orders = target_rps_per_thread * duration_sec * 1.1;
+
+            py::array_t<uint64_t> service_times_np(max_expected_orders);
+            py::array_t<uint64_t> queue_times_np(max_expected_orders);
+            
+            uint64_t* srv_ptr = service_times_np.mutable_data();
+            uint64_t* que_ptr = queue_times_np.mutable_data();
+
+            size_t processed_count = 0;
+            size_t buffer_size = active_stream_cache.size();
+
+            {
+                py::gil_scoped_release release;
+
+                auto t1 = std::chrono::high_resolution_clock::now();
+                unsigned int aux;
+                uint64_t c1 = __rdtscp(&aux);
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                uint64_t c2 = __rdtscp(&aux);
+                auto t2 = std::chrono::high_resolution_clock::now();
+                double tsc_to_ns = static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count()) / (c2 - c1);
+                
+                uint64_t start_tsc = __rdtscp(&aux);
+                uint64_t duration_tsc = (duration_sec * 1'000'000'000) / tsc_to_ns;
+                uint64_t end_tsc = start_tsc + duration_tsc;
+                uint64_t interval_tsc = interval_ns / tsc_to_ns;
+
+                for (size_t i = 0; i < warmup_count && i < active_stream_cache.size(); ++i) {
+                }
+                
+                while (__rdtscp(&aux) < end_tsc && processed_count < max_expected_orders) {
+                    const RawOrderData& raw = active_stream_cache[(warmup_count + processed_count) % buffer_size];
+                    uint64_t expected_arrival_tsc = start_tsc + (processed_count * interval_tsc);
+                    
+                    while (__rdtscp(&aux) < expected_arrival_tsc) { }
+                    
+                    uint64_t arrival_tsc = __rdtscp(&aux);
+                    
+                    {
+                        std::lock_guard<std::mutex> match_lock(book.engine_mutex);
+                        uint32_t order_index = ArenaAllocator::allocate_index();
+                        Order* order = ArenaAllocator::get_order(order_index);
+                        
+                        uint32_t current_meta_index = book.metadata_vault.size();
+                        book.metadata_vault.push_back(OrderMetadata{raw.full_order_id, raw.full_owner_id});
+                        
+                        order->metadata_index = current_meta_index;
+                        order->type = raw.type;
+                        order->side = raw.side;
+                        order->is_canceled = raw.is_canceled;
+                        order->price = raw.price;
+                        order->number_of_shares = raw.number_of_shares;
+                        order->max_authorized_funds = raw.max_authorized_funds;
+                        
+                        book.process_order(order_index); 
+                    }
+                    
+                    uint64_t completion_tsc = __rdtscp(&aux);
+                    
+                    srv_ptr[processed_count] = static_cast<uint64_t>((completion_tsc - arrival_tsc) * tsc_to_ns);
+                    que_ptr[processed_count] = static_cast<uint64_t>((completion_tsc - expected_arrival_tsc) * tsc_to_ns);
+                    processed_count++;
+                }
+            }
+            
+            return py::make_tuple(service_times_np, queue_times_np, processed_count);
+        }, 
+            py::arg("numpy_orders"), 
+            py::arg("target_rps_per_thread"),
+            py::arg("duration_sec"),
+            py::arg("warmup_count") = 50000)
 
         .def("get_book_depth", [](OrderBook &book) {
             py::gil_scoped_release release;
