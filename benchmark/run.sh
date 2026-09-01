@@ -7,4 +7,4 @@ cmake --build build -j 4
 
 echo -e "\n========== 2. EXECUTING BENCHMARK =========="
 cd /app
-python benchmark/benchmark_cpp.py
+python -X faulthandler benchmark/Q1/benchmark_cpp.py

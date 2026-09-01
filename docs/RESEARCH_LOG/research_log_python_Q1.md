@@ -10,6 +10,8 @@ The methodology for the benchmarking is simple. It follows 3 order book depths [
 
 The expected result for the Python engine was that Throughput would be baselined (saturated), mimicking a saturation curve where it fails to exhibit high throughput even with the addition of threads. This is because of the Python GIL (Global Interpreter Lock), which forces each thread to wait for the sequential execution of the Python code.
 
+- **Fix:** Since the order injection was the bottleneck during the initial benchmarking , for the python engine 600k RSP per second baseline is establishted , to demonstrate the Python GIL choking and throughput baselining.
+
 ## First Benchmarking (Ran - August 28th)
 The result of the first benchmarking revealed and exposed the real and expected downgrading of the Python engine under concurrent multi-threaded load caused by GIL locking, but with a flaw (that will be discussed in the flaws section).
 
