@@ -182,6 +182,7 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
             std::vector<RawOrderData> active_stream_cache;
             active_stream_cache.reserve(num_orders);
 
+            // 1. Ultra-fast NumPy Unboxing
             for (size_t i = 0; i < num_orders; ++i) {
                 RawOrderData raw;
                 raw.full_order_id = (static_cast<unsigned __int128>(arr_oid_h(i)) << 64) | arr_oid_l(i);
@@ -224,7 +225,27 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
                 uint64_t interval_tsc = interval_ns / tsc_to_ns;
 
                 for (size_t i = 0; i < warmup_count && i < active_stream_cache.size(); ++i) {
+                    const RawOrderData& raw = active_stream_cache[i];
+                    std::lock_guard<std::mutex> match_lock(book.engine_mutex);
+                    
+                    uint32_t order_index = ArenaAllocator::allocate_index();
+                    Order* order = ArenaAllocator::get_order(order_index);
+                    uint32_t current_meta_index = book.metadata_vault.size();
+                    book.metadata_vault.push_back(OrderMetadata{raw.full_order_id, raw.full_owner_id});
+                    
+                    order->metadata_index = current_meta_index;
+                    order->type = raw.type;
+                    order->side = raw.side;
+                    order->is_canceled = raw.is_canceled;
+                    order->price = raw.price;
+                    order->number_of_shares = raw.number_of_shares;
+                    order->max_authorized_funds = raw.max_authorized_funds;
+                    
+                    book.process_order(order_index); 
                 }
+                
+                uint64_t lock_acquired_tsc = 0; 
+                uint64_t completion_tsc = 0;    
                 
                 while (__rdtscp(&aux) < end_tsc && processed_count < max_expected_orders) {
                     const RawOrderData& raw = active_stream_cache[(warmup_count + processed_count) % buffer_size];
@@ -232,13 +253,12 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
                     
                     while (__rdtscp(&aux) < expected_arrival_tsc) { }
                     
-                    uint64_t arrival_tsc = __rdtscp(&aux);
-                    
                     {
                         std::lock_guard<std::mutex> match_lock(book.engine_mutex);
+                        lock_acquired_tsc = __rdtscp(&aux); // OS granted the lock
+                        
                         uint32_t order_index = ArenaAllocator::allocate_index();
                         Order* order = ArenaAllocator::get_order(order_index);
-                        
                         uint32_t current_meta_index = book.metadata_vault.size();
                         book.metadata_vault.push_back(OrderMetadata{raw.full_order_id, raw.full_owner_id});
                         
@@ -251,12 +271,12 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
                         order->max_authorized_funds = raw.max_authorized_funds;
                         
                         book.process_order(order_index); 
+                        completion_tsc = __rdtscp(&aux); 
                     }
                     
-                    uint64_t completion_tsc = __rdtscp(&aux);
+                    srv_ptr[processed_count] = static_cast<uint64_t>((completion_tsc - lock_acquired_tsc) * tsc_to_ns);
+                    que_ptr[processed_count] = static_cast<uint64_t>((lock_acquired_tsc - expected_arrival_tsc) * tsc_to_ns);
                     
-                    srv_ptr[processed_count] = static_cast<uint64_t>((completion_tsc - arrival_tsc) * tsc_to_ns);
-                    que_ptr[processed_count] = static_cast<uint64_t>((completion_tsc - expected_arrival_tsc) * tsc_to_ns);
                     processed_count++;
                 }
             }
@@ -266,7 +286,7 @@ PYBIND11_MODULE(mitori_engine_cpp, m){
             py::arg("numpy_orders"), 
             py::arg("target_rps_per_thread"),
             py::arg("duration_sec"),
-            py::arg("warmup_count") = 50000)
+            py::arg("warmup_count") = 0)
 
         .def("get_book_depth", [](OrderBook &book) {
             py::gil_scoped_release release;

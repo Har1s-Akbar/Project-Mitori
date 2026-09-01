@@ -12,10 +12,10 @@ import sys
 sys.path.append('/app/mitori_engine/core_cpp/build/') 
 import mitori_engine_cpp
 
-N_TRIALS = 5
+N_TRIALS = 6
 PRECISION_MULTIPLIER = Decimal('100000000')
 TOTAL_TARGET_RPS = 600_000
-DURATION_SEC = 30
+DURATION_SEC = 28
 THREAD_COUNTS = [1,2, 4]
 
 def load_json(filepath: str) -> list:
