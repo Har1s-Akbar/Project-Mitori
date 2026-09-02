@@ -190,7 +190,6 @@ by adapting this approach the benchmarking was able to successfully reach the co
 | **50k** | 4 | 746,013 | 2,400,000 | **68.9%** |
 
 **Exclusive Finding:** The 25-second iteration provided the clearest baseline of algorithmic speed. At a 25k resting depth, the P99 Service Time remained locked at exactly **288 nanoseconds**. This proves the `ArenaAllocator` operates efficiently regardless of how long the benchmark sustains load.
-
 ---
 
 ## 4. Benchmark: 28-Second Interval (6-Trial Subset)
@@ -223,10 +222,49 @@ by adapting this approach the benchmarking was able to successfully reach the co
 
 **Exclusive Finding:** Injecting nearly 17 million orders per thread in a single run confirmed that standard OS queues will plateau at maximum penalty rather than crashing. The 4-thread Queue Time reached an absolute peak of **268 milliseconds**, effectively rendering the system unresponsive.
 
+## 5. Benchmark: 30-second Interval
+This matrix represents 45 successful closed-loop trials executing at the maximum 30-second duration per test.
+
+| Depth_Tier | Threads | Trials | Avg_Throughput_RPS | Avg_Service_P50_ns | Avg_Service_P99_ns | Avg_Queue_P50_ns | Avg_Queue_P99_ns |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **1k** | 1 | 5 | 583,206 | 266 | 266 | 9,902,338 | 9,902,338 |
+| **1k** | 2 | 5 | 1,035,753 | 283 | 369 | 39,294,963 | 72,834,048 |
+| **1k** | 4 | 5 | 851,611 | 340 | 1,784 | 140,718,633 | 157,270,727 |
+| **25k** | 1 | 5 | 600,296 | 398 | 398 | 18,501,930 | 18,501,930 |
+| **25k** | 2 | 5 | 1,049,553 | 549 | 598 | 96,776,422 | 98,594,525 |
+| **25k** | 4 | 5 | 823,439 | 493 | 1,516 | 172,271,982 | 216,620,913 |
+| **50k** | 1 | 5 | 600,295 | 3,220 | 3,220 | 12,911,892 | 12,911,892 |
+| **50k** | 2 | 5 | 1,034,447 | 1,090 | 7,159 | 107,562,200 | 109,315,601 |
+| **50k** | 4 | 5 | 716,388 | 847 | 6,600 | 226,699,077 | 311,124,511 |
+
+## 2. Theoretical vs. Actual Throughput Degradation
+Assuming a perfect 1-thread baseline of 600,000 RPS, this table quantifies the exact structural efficiency—and subsequent collapse—of horizontal scaling via standard OS mutex locks over an extreme 30-second firehose.
+
+| Depth_Tier | Threads | Actual_Throughput | Expected_Throughput | Difference (RPS Lost) | % Achieved | % Lost (Degradation) |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **1k** | 1 | 583,206 | 600,000 | 16,794 | 97.2% | 2.8% |
+| **1k** | 2 | 1,035,753 | 1,200,000 | 164,247 | 86.3% | 13.7% |
+| **1k** | 4 | 851,611 | 2,400,000 | 1,548,389 | 35.5% | **64.5%** |
+| **25k** | 1 | 600,296 | 600,000 | -296 | 100.0% | 0.0% |
+| **25k** | 2 | 1,049,553 | 1,200,000 | 150,447 | 87.5% | 12.5% |
+| **25k** | 4 | 823,439 | 2,400,000 | 1,576,561 | 34.3% | **65.7%** |
+| **50k** | 1 | 600,295 | 600,000 | -295 | 100.0% | 0.0% |
+| **50k** | 2 | 1,034,447 | 1,200,000 | 165,553 | 86.2% | 13.8% |
+| **50k** | 4 | 716,388 | 2,400,000 | 1,683,612 | 29.8% | **70.2%** |
+
+### WSL2 Memory Barrier
+This is the most crucial takeaway from this dataset. By increasing the WSL2 VM boundary to 8GB, the Docker container successfully secured the required 6GB of physical RAM. The engine safely absorbed the 1.6 GB `metadata_vault` transient doubling spike alongside the 1.27 GB telemetry buffers. The system processed approximately **18 million orders per thread** without a single container crash. 
+
+### Final Verdict: The OS Contention Collapse
+This 30-second maximum duration test acts as the final nail in the coffin for standard OS-level locking in high-frequency trading.
+*   **The Thrashing Ceiling:** Attempting to force 4 threads into the engine results in a violent loss of ~1.5 to 1.68 million RPS.
+*   **The Lost Percentage:** The engine consistently loses **64.5% to 70.2%** of its theoretical capacity as the OS CPU Scheduler completely takes over.
+*   **The Queue:** Waiting for the lock to become available balloons to a staggering maximum average of **311 milliseconds** (`Avg_Queue_P99_ns` at 50k/4-Threads). 
+
 
 ## 5. Unified Observation and Findings
 
-Across 260 total trials and varying injection intervals, three core structural truths emerged regarding the Q1 architecture:
+Across 305 total trials and varying injection intervals, three core structural truths emerged regarding the Q1 architecture:
 
 ### 5.1 The Sub-Microsecond Algorithm
 Under a single thread, the C++ `ArenaAllocator` and the Pybind11 `unchecked<1>` zero-copy pipeline successfully bypassed all memory boxing. Across the 1k and 25k depths, the algorithm executed flawlessly, processing full binary heap mutations between **198 ns and 288 ns** (P99). 
