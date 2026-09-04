@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Depends, status, Request
+from fastapi import FastAPI, HTTPException, Depends, status, Request, Response
 from pydantic import Field
 import uuid
 import uvicorn
@@ -48,7 +48,7 @@ app = FastAPI(
 
 logger = structlog.getLogger(__name__)
 
-@app.middleware("httpx")
+@app.middleware("http")
 async def logging_middleware(request: Request, call_next):
     if request.url.path in ["/health", "/metrics", "/docs", "/openapi.json"]:
         return await call_next(request)
@@ -59,37 +59,40 @@ async def logging_middleware(request: Request, call_next):
         correlation_id=correlation_id,
         path = request.url.path
     )
-    start_time = time.perf_counter()
+    start_time = time.perf_counter_ns()
     try:
         response = await call_next(request)
-        process_time = time.perf_counter() - start_time
+        process_time = time.perf_counter_ns() - start_time
+        response.headers["X-Total-Process-NS"] = str(process_time)
+        
         logger.info(
             "http_request_processed",
             status_code = response.status_code,
-            duration_ms= round(process_time*1000, 2)
+            duration_ns= process_time
         )
         return response
     except Exception as e:
-        process_time = time.perf_counter() - start_time
+        process_time = time.perf_counter_ns() - start_time
         logger.exception(
             "http_request_failed",
-            duration_ms=round(process_time*1000, 2)
+            duration_ns=process_time
         )
         raise
 
 @app.post("/order")
 async def place_order(
     order: OrderReq,
+    response: Response,
     # engine : EngineProtocol = Depends(get_matching_engine),
     redis_client: redis.Redis = Depends(get_redis),
-    current_user: AuthenticatedUser = Depends(have_funds)
+    current_user: AuthenticatedUser = Depends(have_funds),
 ):
     
     ticker = order.ticker
     engine = get_matching_engine(ticker=ticker)
     new_order_id = uuid.uuid4()
 
-    executed_trades = engine.submit_order(
+    executed_trades, engine_latency_ns = engine.submit_order(
             ticker = order.ticker,
             side = order.side,
             order_id=new_order_id,
@@ -100,7 +103,8 @@ async def place_order(
             is_canceled=False,
             max_authorized_funds=order.max_authorized_funds
         )
-    
+    response.headers["X-Engine-Latency-NS"] = str(engine_latency_ns)
+
     if executed_trades:
         current_context = structlog.contextvars.get_contextvars()
         correlation_id = current_context.get("correlation_id", "fallback_id")

@@ -32,7 +32,7 @@ class MitoriGateway:
 
     def submit_order(self, ticker:str ,order_id: uuid.UUID, order_owner_id: uuid.UUID,
                      side: Side, type: Type,is_canceled:bool,
-                     number_of_shares: Decimal, price: Optional[Decimal],max_authorized_funds: Optional[Decimal] = None):
+                     number_of_shares: Decimal, price: Optional[Decimal],max_authorized_funds: Optional[Decimal] = None)-> tuple[list,int]:
         
         oid_high, oid_low = self._split_uuid(order_id)
         own_high, own_low = self._split_uuid(order_owner_id)
@@ -41,6 +41,7 @@ class MitoriGateway:
         shares_scaled = int(number_of_shares * self.PRECISION_MULTIPLIER)
         max_funds_scaled = int(max_authorized_funds * self.PRECISION_MULTIPLIER) if max_authorized_funds is not None  else None
 
+        starting_time = time.perf_counter_ns()
         raw_trades = self.book.process_order(
             order_id_high=oid_high,
             order_id_low=oid_low,
@@ -53,6 +54,8 @@ class MitoriGateway:
             number_of_shares=shares_scaled,
             max_authorized_funds=max_funds_scaled
         )
+        ending_time = time.perf_counter_ns()
+        engine_latency = starting_time - ending_time
 
         processed_trades = []
         for t in raw_trades:
@@ -66,7 +69,7 @@ class MitoriGateway:
             )
             processed_trades.append(trade_object)
             
-        return processed_trades
+        return processed_trades, engine_latency
 
     def cancel_order(self, order_id: uuid.UUID) -> Optional[Order]:
         oid_high, oid_low = self._split_uuid(order_id)
