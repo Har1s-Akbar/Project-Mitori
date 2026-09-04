@@ -18,6 +18,7 @@ class Side(str, Enum):
 
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+REDIS_DB_INDEX = int(os.getenv("REDIS_DB_INDEX"), 0)
 JWT_SECRET = os.getenv("JWT_SECRET_KEY", "mitori_shared_secret")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
@@ -35,7 +36,7 @@ SEED = 39
 OUTPUT_DIR = "benchmark/data_for_test"
 
 def connect_and_sterilize_redis() -> redis.Redis:
-    r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=1, decode_responses=True)
+    r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB_INDEX, decode_responses=True)
     print("Redis cache (FLUSHALL)...")
     r.flushall()
     return r
@@ -60,12 +61,10 @@ def mint_users_and_seed_cache(r: redis.Redis) -> list[str]:
         token = jwt.encode(payload, JWT_SECRET, algorithm=ALGORITHM)
         user_tokens.append(token)
         
-        # Hydrate cash liquidity (1,000,000.00 cash)
         pipeline.hset(f"cache:portfolio:{user_uuid}", mapping={
             "balance": "1000000.00000000",
             "locked_balance": "0.00000000"
         })
-        # Hydrate asset liquidity (10,000 shares of APP)
         pipeline.hset(f"cache:positions:{user_uuid}:{TICKER}", mapping={
             "shares": "10000.00000000",
             "locked_shares": "0.00000000"

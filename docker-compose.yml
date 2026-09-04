@@ -42,6 +42,7 @@ services:
       - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
       - POSTGRES_HOST=${DATABASE_HOST}
       - POSTGRES_PORT=5432
+      - REDIS_DB_INDEX=REDIS_DB_INDEX
       - REDIS_URL=redis://redis:6379/0 
       - PYTHONPATH=/app/core_cpp/build
     depends_on:
@@ -124,6 +125,11 @@ services:
       - /app/mitori_engine/core_cpp/build 
     environment:
       - PYTHONPATH=/app
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET_KEY=JWT_SECRET_KEY
+      - REDIS_DB_INDEX=REDIS_DB_INDEX
+      - ALGORITHM=HS256
     ulimits:
       nofile:
         soft: 65535

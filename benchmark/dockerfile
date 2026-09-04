@@ -1,8 +1,37 @@
+# Stage 1: Pull official static k6 binary
+FROM grafana/k6:latest AS k6_source
+
+# Stage 2: Unified Python Benchmark & Profiling Environment
 FROM python:3.14-slim
 
-RUN apt-get update && apt-get install -y build-essential cmake linux-perf valgrind
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
-RUN pip install numpy orjson
+
+# Combine Q1/Q2 profiling utilities with Q3 network analysis tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    linux-perf \
+    valgrind \
+    curl \
+    iproute2 \
+    procps \
+    libopenblas-dev \
+    gfortran \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy pre-compiled k6 binary directly to system PATH
+COPY --from=k6_source /usr/bin/k6 /usr/local/bin/k6
+
+# Unified Python dependencies (Q1, Q2, and Q3 requirements)
+RUN pip install --no-cache-dir \
+    numpy \
+    orjson \
+    redis \
+    pyjwt \
+    scipy \
+    pandas
 
 CMD ["bash"]
