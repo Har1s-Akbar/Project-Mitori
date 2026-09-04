@@ -63,7 +63,7 @@ async def logging_middleware(request: Request, call_next):
     try:
         response = await call_next(request)
         process_time = time.perf_counter_ns() - start_time
-        Response.headers["X-Total-Process-NS"] = str(process_time)
+        response.headers["X-Total-Process-NS"] = str(process_time)
         
         logger.info(
             "http_request_processed",
