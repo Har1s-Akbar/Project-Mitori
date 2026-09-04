@@ -129,6 +129,7 @@ services:
       - REDIS_PORT=6379
       - JWT_SECRET_KEY=JWT_SECRET_KEY
       - REDIS_DB_INDEX=REDIS_DB_INDEX
+      - ENGINE_URL=ENGINE_URL
       - ALGORITHM=HS256
     ulimits:
       nofile:

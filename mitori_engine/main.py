@@ -193,10 +193,15 @@ async def delete_order(
 
 @app.post("/admin/reset")
 async def reset_engine_state():
-    for ticker in ALLOWED_TICKERS:
-        engine = get_matching_engine(ticker=ticker)
+    try:
+        engine = get_matching_engine(ticker="APP")
         engine.reset_engine()
-    return {"status": "cleared"}
-
+        return {"status": "success", "message": "Matching engine memory state reset"}
+    except Exception as e:
+        logger.exception("admin_reset_failed", error=str(e))
+        return{
+            'status_code':status.HTTP_500_INTERNAL_SERVER_ERROR,
+            'content':{"status": "error", "detail": str(e)}
+        }
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8001, reload=True)
