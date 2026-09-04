@@ -2,6 +2,7 @@ import uuid
 import os
 from typing import List, Optional
 from decimal import Decimal
+import time
 
 from core_python.models import Order , Side, Type
 from core_python.engine import OrderBook
@@ -23,7 +24,7 @@ class PythonMitoriGateway:
         number_of_shares: Decimal,
         price:Optional[Decimal],
         max_authorized_funds:Optional[Decimal]=None,
-    ) -> List:
+    ) -> tuple[list, int]:
         
         
         price_scaled = int(price * self.PRECISION_MULTIPLIER) if price is not None else 0
@@ -41,9 +42,11 @@ class PythonMitoriGateway:
             max_authorized_funds=funds_scaled,
             is_canceled=is_canceled
         )
-
+        starting_time = time.perf_counter_ns()
         executed_trades = self.book.process_order(new_order)
-        return executed_trades
+        final_time = time.perf_counter_ns()
+        execution_latency = final_time - starting_time
+        return executed_trades, execution_latency
 
     def cancel_order(self, order_id: uuid.UUID):
         return self.book.tombstone_delete(str(order_id))
@@ -51,4 +54,4 @@ class PythonMitoriGateway:
     def get_bbo(self):
         return self.book.get_current_bbo()
     def reset_engine(self):
-        self.reset_engine()
+        self.book.reset_engine()

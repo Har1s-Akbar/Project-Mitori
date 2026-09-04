@@ -9,12 +9,14 @@ def create_redis_pool () -> BlockingConnectionPool:
     REDIS_HOST = os.getenv("REDIS_HOST") or os.getenv("REDIS") or "localhost"
     REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
     db_index = int(os.getenv("REDIS_DB_INDEX", 0))
+    max_conn = int(os.getenv("REDIS_MAX_CONNECTIONS", 100))
+    
     return BlockingConnectionPool(
         host = REDIS_HOST,
         port = REDIS_PORT,
         db = db_index,
         decode_responses=True,
-        max_connections=15,
+        max_connections=max_conn,
         socket_connect_timeout=2.0,
         socket_timeout=5.0,
         retry_on_timeout=True,

@@ -2,8 +2,12 @@ import orjson
 import structlog
 import sys
 import logging
+import os
 
 def configure_fastapi_logging():
+    benchmark_mode=os.getenv("BENCHMARK_MODE", "false").lower() == "true"
+    target_log_level = logging.WARNING if benchmark_mode else logging.INFO
+
     def orjson_dumps(obj, **kwargs):
         return orjson.dumps(obj).decode('utf-8')
 
@@ -37,11 +41,12 @@ def configure_fastapi_logging():
 
     root_logger = logging.getLogger()
     root_logger.handlers = [handler]
-    root_logger.setLevel(logging.INFO) 
+    root_logger.setLevel(target_log_level) 
 
     for _log in ["uvicorn", "uvicorn.error", "uvicorn.access"]:
         logger_instance = logging.getLogger(_log)
         logger_instance.handlers = [handler]
+        logger_instance.setLevel(target_log_level)
         logger_instance.propagate = False
 
     access_logger = logging.getLogger("uvicorn.access")
