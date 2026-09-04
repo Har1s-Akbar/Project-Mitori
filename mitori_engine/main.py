@@ -10,6 +10,7 @@ from api.check_ownership import check_owner_ship
 
 from api.dependencies import get_redis, get_matching_engine
 from core_python.interfaces import EngineProtocol
+from core_python.config import ALLOWED_TICKERS
 
 import json
 import dataclasses
@@ -87,7 +88,6 @@ async def place_order(
     redis_client: redis.Redis = Depends(get_redis),
     current_user: AuthenticatedUser = Depends(have_funds),
 ):
-    
     ticker = order.ticker
     engine = get_matching_engine(ticker=ticker)
     new_order_id = uuid.uuid4()
@@ -191,5 +191,17 @@ async def delete_order(
         "status": status.HTTP_200_OK
     }
 
+@app.post("/admin/reset")
+async def reset_engine_state():
+    try:
+        engine = get_matching_engine(ticker="APP")
+        engine.reset_engine()
+        return {"status": "success", "message": "Matching engine memory state reset"}
+    except Exception as e:
+        logger.exception("admin_reset_failed", error=str(e))
+        return{
+            'status_code':status.HTTP_500_INTERNAL_SERVER_ERROR,
+            'content':{"status": "error", "detail": str(e)}
+        }
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8001, reload=True)
