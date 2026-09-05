@@ -19,14 +19,19 @@ class Side(str, Enum):
 
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
-raw_db_index = os.getenv("REDIS_DB_INDEX", 0)
+raw_db_index = os.getenv("REDIS_DB_INDEX", 1)
+
+SYSTEM_MULTIPLIER = 100_000_000
+
+raw_cash = 1_000_000 * SYSTEM_MULTIPLIER     
+raw_shares = 10_000 * SYSTEM_MULTIPLIER      
 
 try:
     REDIS_DB_INDEX = int(raw_db_index)
 except ValueError:
-    REDIS_DB_INDEX = 0
+    REDIS_DB_INDEX = 1
 
-JWT_SECRET = os.getenv("JWT_SECRET_KEY")
+JWT_SECRET = os.getenv("JWT_SECRET_KEY", "mitori_shared_secret_super_secure_32bytes_key!")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
 NUM_USERS = 20_000
@@ -74,19 +79,19 @@ def mint_users_and_seed_cache(r: redis.Redis) -> list[str]:
             "token_type": "access",
             "jti": str(uuid.uuid5(USER_NAMESPACE, f"jti_{i}")),
             "user_id": user_uuid,
-            "kyc_verified": True,
+            "is_kyc_verified": True,
             "exp": static_exp
         }
         token = jwt.encode(payload, JWT_SECRET, algorithm=ALGORITHM)
         user_tokens.append(token)
         
         pipeline.hset(f"cache:portfolio:{user_uuid}", mapping={
-            "balance": "1000000.00000000",
-            "locked_balance": "0.00000000"
+            "available_cash": str(raw_cash),
+            "locked_balance": "0"
         })
-        pipeline.hset(f"cache:positions:{user_uuid}:{TICKER}", mapping={
-            "shares": "10000.00000000",
-            "locked_shares": "0.00000000"
+        pipeline.hset(f"cache:positions:{user_uuid}", mapping={
+            "APP": str(raw_shares),
+            "locked_APP": "0"
         })
         
         if i % 5000 == 0:

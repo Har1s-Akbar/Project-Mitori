@@ -12,7 +12,7 @@ from seeding_script import mint_users_and_seed_cache, connect_and_sterilize_redi
 sys.path.append(str(Path(__file__).resolve().parent))
 
 ENGINE_URL = os.getenv("ENGINE_URL", "http://mitori_engine:8000")
-RESULTS_DIR = Path(f"/app/benchmark/data/python_test_data/full_path_benchmarking_python_{int(time.time())}")
+RESULTS_DIR = Path("/app/benchmark/data/python_test_data/")
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 def sterilize_environment():
@@ -32,7 +32,7 @@ def run_warmup():
         "k6", "run",
         "-e", "TARGET_RPS=1000",
         "-e", "DURATION=5s",
-        "-e", "DATA_PATH=/app/benchmark/data/Q3/warmup.json",
+        "-e", "DATA_PATH=/app/benchmark/data/data_for_test/warmup.json",
         "-e", "CSV_OUTPUT_PATH=/app/benchmark/data/Q3/warmup_summary.csv",
         "/app/benchmark/k6/load_test.js"
     ]
@@ -54,9 +54,9 @@ def run_matrix(engine_label: str, rps_tiers: list[int], trials: int):
                 "k6", "run",
                 "-e", f"TARGET_RPS={rps}",
                 "-e", "DURATION=30s",
-                "-e", "DATA_PATH=/app/benchmark/data/Q3/test.json",
+                "-e", "DATA_PATH=/app/benchmark/data/data_for_test/test.json",
                 "-e", f"CSV_OUTPUT_PATH={csv_path}",
-                "/app/benchmark/k6/load_test.js"
+                "/app/benchmark/Q3/k6/load_test.js"
             ]
             
             start_ts = time.time()

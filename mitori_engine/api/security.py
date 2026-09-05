@@ -15,10 +15,13 @@ class AuthenticatedUser(BaseModel):
     user_id:str
     kyc_verified:bool
 
+jwt_secret = os.getenv('JWT_SECRET_KEY', 'mitori_shared_secret_super_secure_32bytes_key!')
+jwt_algorithm = os.getenv('ALGORITHM', 'HS256')
+
 async def is_user_Authenticated(credentials:Annotated[HTTPAuthorizationCredentials,Depends(security)])->AuthenticatedUser:
     token = credentials.credentials
     try:
-        payload = jwt.decode(token, os.getenv('JWT_SECRET_KEY'), algorithms=[os.getenv('ALGORITHM')])
+        payload = jwt.decode(token, jwt_secret, algorithms=[jwt_algorithm])
 
         user_id_from_req : str = payload.get('user_id')
         kyc_verified_from_req :bool = payload.get('is_kyc_verified')

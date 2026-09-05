@@ -127,9 +127,9 @@ services:
       - PYTHONPATH=/app
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET_KEY=JWT_SECRET_KEY
+      - JWT_SECRET_KEY="mitori_shared_secret_super_secure_32bytes_key!"
       - REDIS_DB_INDEX=1
-      - ENGINE_URL=ENGINE_URL
+      - ENGINE_URL=http://mitori_engine:8000
       - ALGORITHM=HS256
     ulimits:
       nofile:
