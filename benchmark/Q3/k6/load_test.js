@@ -2,17 +2,16 @@ import http from 'k6/http';
 import { check } from 'k6';
 import { Trend } from 'k6/metrics';
 import { SharedArray } from 'k6/data';
-import scenario from 'k6/execution';
-
+import exec from 'k6/execution';
 
 const CONFIG = {
   TARGET_RPS: parseInt(__ENV.TARGET_RPS || '5000', 10),
   DURATION: __ENV.DURATION || '30s',
-  BASE_URL: __ENV.BASE_URL || 'http://localhost:8000',
+  BASE_URL: __ENV.ENGINE_URL || __ENV.BASE_URL || 'http://mitori_engine:8000',
   DATA_PATH: __ENV.DATA_PATH || '/app/benchmark/data/Q3/test.json',
-  CSV_OUTPUT_PATH: __ENV.CSV_OUTPUT_PATH || '/app/benchmark/data/python_test_data/python_csv_data.csv',
-  PRE_ALLOCATED_VUS: 100,
-  MAX_VUS: 400,
+  CSV_OUTPUT_PATH: __ENV.CSV_OUTPUT_PATH || '/app/benchmark/data/Q3/results/trial_output.csv',
+  PRE_ALLOCATED_VUS: parseInt(__ENV.PRE_ALLOCATED_VUS || '100', 10),
+  MAX_VUS: parseInt(__ENV.MAX_VUS || '1000', 10), // Raised to 1000 to prevent VU exhaustion under queueing
 };
 
 const orderStream = new SharedArray('order_stream', function () {
@@ -34,12 +33,18 @@ export const options = {
       maxVUs: CONFIG.MAX_VUS,
     },
   },
+  // Explicitly enables p(99) metric calculation across all Trends
+  summaryTrendStats: ['min', 'avg', 'med', 'p(90)', 'p(95)', 'p(99)', 'max'],
   discardResponseBodies: true,
 };
 
 export default function () {
-  const index = scenario.iterationInTest % orderStream.length;
+  const index = exec.scenario.iterationInTest % orderStream.length;
   const item = orderStream[index];
+
+  if (!item || !item.token) {
+    return;
+  }
 
   const params = {
     headers: {
@@ -70,11 +75,20 @@ export default function () {
   }
 }
 
+// Goja-compatible string padding helper (ES5 safe)
+function padLeft(value, targetLength) {
+  var str = String(value !== undefined && value !== null ? value : '');
+  while (str.length < targetLength) {
+    str = ' ' + str;
+  }
+  return str;
+}
+
 export function handleSummary(data) {
   const getMetricStats = (metricName) => {
     const m = data.metrics[metricName];
     if (!m || !m.values) {
-      return { min: 0, avg: 0, med: 0, p90: 0, p95: 0, p99: 0, max: 0 };
+      return { min: '0.00', avg: '0.00', med: '0.00', p90: '0.00', p95: '0.00', p99: '0.00', max: '0.00' };
     }
     return {
       min: (m.values.min || 0).toFixed(2),
@@ -106,11 +120,11 @@ export function handleSummary(data) {
 ================================================================================
 Target RPS: ${CONFIG.TARGET_RPS} | Duration: ${CONFIG.DURATION} | Max VUs: ${CONFIG.MAX_VUS}
 --------------------------------------------------------------------------------
-Metric                  Unit       p50 (Med)       p90           p99         Max
+Metric                  Unit         p50 (Med)           p90           p99         Max
 --------------------------------------------------------------------------------
-HTTP Req Duration       ms    ${httpStats.med.padStart(12)}  ${httpStats.p90.padStart(12)}  ${httpStats.p99.padStart(12)}  ${httpStats.max.padStart(10)}
-Engine Latency (T_eng)  ns    ${engineStats.med.padStart(12)}  ${engineStats.p90.padStart(12)}  ${engineStats.p99.padStart(12)}  ${engineStats.max.padStart(10)}
-Total Process (T_tot)   ns    ${totalStats.med.padStart(12)}  ${totalStats.p90.padStart(12)}  ${totalStats.p99.padStart(12)}  ${totalStats.max.padStart(10)}
+HTTP Req Duration       ms      ${padLeft(httpStats.med, 12)}  ${padLeft(httpStats.p90, 12)}  ${padLeft(httpStats.p99, 12)}  ${padLeft(httpStats.max, 10)}
+Engine Latency (T_eng)  ns      ${padLeft(engineStats.med, 12)}  ${padLeft(engineStats.p90, 12)}  ${padLeft(engineStats.p99, 12)}  ${padLeft(engineStats.max, 10)}
+Total Process (T_tot)   ns      ${padLeft(totalStats.med, 12)}  ${padLeft(totalStats.p90, 12)}  ${padLeft(totalStats.p99, 12)}  ${padLeft(totalStats.max, 10)}
 ================================================================================
 `;
 

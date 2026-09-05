@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
-TEST_SECRET = "3d8ea09e7fa438c9eeeb0bff1abd281313b219703ad3c79ea64c96b8c464fb08"
+TEST_SECRET = "ci-test-shared-jwt-secret"
 os.environ["JWT_SECRET_KEY"] = TEST_SECRET
 os.environ["ALGORITHM"] = "HS256"
 

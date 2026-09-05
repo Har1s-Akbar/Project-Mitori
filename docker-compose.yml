@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15-alpine
@@ -42,17 +40,27 @@ services:
       - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
       - POSTGRES_HOST=${DATABASE_HOST}
       - POSTGRES_PORT=5432
-      - REDIS_DB_INDEX=REDIS_DB_INDEX
-      - REDIS_URL=redis://redis:6379/0 
+      - JWT_SECRET_KEY=mitori_shared_secret_super_secure_32bytes_key!
+      - ALGORITHM=HS256
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=1
+      - REDIS_DB_INDEX=1
+      - REDIS_URL=redis://redis:6379/1
       - PYTHONPATH=/app/core_cpp/build
     depends_on:
       redis:
         condition: service_healthy
     volumes:
       - ./mitori_engine:/app
-      - /app/core_cpp/build        
+      - /app/core_cpp/build
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     command: >
       bash -c "cd core_cpp && find build -mindepth 1 -delete && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j 2 && cd .. && uvicorn main:app --host 0.0.0.0 --port 8000"
+
   mitori_backend:
     build:
       context: ./mitori_backend
@@ -74,6 +82,7 @@ services:
         condition: service_healthy
     volumes:
       - ./mitori_backend:/app
+
   trade_daemon:
     build:
       context: ./mitori_backend
@@ -115,6 +124,7 @@ services:
       - POSTGRES_HOST=${DATABASE_HOST}
       - POSTGRES_PORT=5432
       - REDIS_URL=redis://redis:6379/0
+
   benchmark_runner:
     build: ./benchmark
     profiles: ["testing"]
@@ -122,15 +132,17 @@ services:
     volumes:
       - ./benchmark:/app/benchmark
       - ./mitori_engine:/app/mitori_engine
-      - /app/mitori_engine/core_cpp/build 
+      - /app/mitori_engine/core_cpp/build
     environment:
       - PYTHONPATH=/app
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET_KEY=JWT_SECRET_KEY
-      - REDIS_DB_INDEX=REDIS_DB_INDEX
-      - ENGINE_URL=ENGINE_URL
+      - REDIS_DB=1
+      - REDIS_DB_INDEX=1
+      - REDIS_URL=redis://redis:6379/1
+      - JWT_SECRET_KEY=mitori_shared_secret_super_secure_32bytes_key!
       - ALGORITHM=HS256
+      - ENGINE_URL=http://mitori_engine:8000
     ulimits:
       nofile:
         soft: 65535
@@ -140,5 +152,6 @@ services:
       resources:
         limits:
           memory: 6G
+
 volumes:
   postgres_data:

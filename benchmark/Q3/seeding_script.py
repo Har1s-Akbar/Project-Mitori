@@ -7,6 +7,7 @@ import jwt
 import redis
 import numpy as np
 import orjson
+import sys
 
 class Type(str, Enum):
     MARKET = "market"
@@ -18,8 +19,14 @@ class Side(str, Enum):
 
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
-REDIS_DB_INDEX = int(os.getenv("REDIS_DB_INDEX"), 0)
-JWT_SECRET = os.getenv("JWT_SECRET_KEY", "mitori_shared_secret")
+raw_db_index = os.getenv("REDIS_DB_INDEX", 1)
+
+try:
+    REDIS_DB_INDEX = int(raw_db_index)
+except ValueError:
+    REDIS_DB_INDEX = 1
+
+JWT_SECRET = os.getenv("JWT_SECRET_KEY", "mitori_shared_secret_super_secure_32bytes_key!")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
 NUM_USERS = 20_000
@@ -33,7 +40,7 @@ SIGMA = 0.50
 DT = 1.0
 SEED = 39
 
-OUTPUT_DIR = "benchmark/data_for_test"
+OUTPUT_DIR = "benchmark/data/data_for_test"
 
 USER_NAMESPACE = uuid.UUID('12345678-1234-5678-1234-567812345678')
 
@@ -44,6 +51,13 @@ def connect_and_sterilize_redis() -> redis.Redis:
         db=REDIS_DB_INDEX, 
         decode_responses=True
     )
+    try:
+        r.ping()
+    except redis.ConnectionError as e:
+        print(f"ERROR: Cannot connect to Redis at {REDIS_HOST}:{REDIS_PORT} - {e}", file=sys.stderr)
+        sys.exit(1)
+        
+    print(f"Sterilizing Redis (FLUSHALL) on {REDIS_HOST}:{REDIS_PORT}...")
     r.flushall()
     return r
 
@@ -60,19 +74,19 @@ def mint_users_and_seed_cache(r: redis.Redis) -> list[str]:
             "token_type": "access",
             "jti": str(uuid.uuid5(USER_NAMESPACE, f"jti_{i}")),
             "user_id": user_uuid,
-            "kyc_verified": True,
+            "is_kyc_verified": True,
             "exp": static_exp
         }
         token = jwt.encode(payload, JWT_SECRET, algorithm=ALGORITHM)
         user_tokens.append(token)
         
         pipeline.hset(f"cache:portfolio:{user_uuid}", mapping={
-            "balance": "1000000.00000000",
-            "locked_balance": "0.00000000"
+            "available_cash": str(raw_cash),
+            "locked_balance": "0"
         })
-        pipeline.hset(f"cache:positions:{user_uuid}:{TICKER}", mapping={
-            "shares": "10000.00000000",
-            "locked_shares": "0.00000000"
+        pipeline.hset(f"cache:positions:{user_uuid}", mapping={
+            "APP": str(raw_shares),
+            "locked_APP": "0"
         })
         
         if i % 5000 == 0:
@@ -116,9 +130,10 @@ def generate_order_stream(tokens: list[str], count: int, rng: np.random.Generato
         
         if order_type == Type.LIMIT.value:
             abs_diff = abs(prices[i] - CENTER_VALUE)
-            safe_price = (CENTER_VALUE - abs_diff - 0.01) if side == Side.BUY.value else (CENTER_VALUE + abs_diff + 0.01)
-            payload["price"] = safe_price
-            
+            raw_price = (CENTER_VALUE - abs_diff - 0.01) if side == Side.BUY.value else (CENTER_VALUE + abs_diff + 0.01)
+            d_price = Decimal(str(raw_price)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            payload["price"] = str(d_price)
+
         orders.append({
             "token": assigned_tokens[i],
             "payload": payload
@@ -135,15 +150,19 @@ def main():
     
     print(f"Generating {WARMUP_ORDERS} warmup orders...")
     warmup_data = generate_order_stream(user_tokens, WARMUP_ORDERS, rng)
-    with open(f"{OUTPUT_DIR}/warmup.json", "wb") as f:
+    warmup_path = os.path.join(OUTPUT_DIR, "warmup.json")
+    with open(warmup_path, "wb") as f:
         f.write(orjson.dumps(warmup_data, option=orjson.OPT_APPEND_NEWLINE))
+    print(f"  -> Wrote {warmup_path}")
         
     print(f"Generating {TEST_ORDERS} test orders...")
     test_data = generate_order_stream(user_tokens, TEST_ORDERS, rng)
-    with open(f"{OUTPUT_DIR}/test.json", "wb") as f:
+    test_path = os.path.join(OUTPUT_DIR, "test.json")
+    with open(test_path, "wb") as f:
         f.write(orjson.dumps(test_data, option=orjson.OPT_APPEND_NEWLINE))
+    print(f"  -> Wrote {test_path}")
         
-    print(f"Phase A successfully written to {OUTPUT_DIR}/")
+    print(f"Phase A data seeding complete. Files ready in {OUTPUT_DIR}/")
 
 if __name__ == "__main__":
     main()
