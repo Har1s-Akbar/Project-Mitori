@@ -1,7 +1,7 @@
 # Stage 1: Pull official static k6 binary
 FROM grafana/k6:latest AS k6_source
 
-# Stage 2: Unified Python Benchmark & Profiling Environment
+# Stage 2: Python 3.14 Environment
 FROM python:3.14-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -9,7 +9,7 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Combine Q1/Q2 profiling utilities with Q3 network analysis tools
+# Native build and compilation toolchain required for Python 3.14 source builds
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
@@ -18,20 +18,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     iproute2 \
     procps \
-    libopenblas-dev \
+    pkg-config \
     gfortran \
+    libopenblas-dev \
+    liblapack-dev \
+    ninja-build \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy pre-compiled k6 binary directly to system PATH
 COPY --from=k6_source /usr/bin/k6 /usr/local/bin/k6
 
-# Unified Python dependencies (Q1, Q2, and Q3 requirements)
+# Upgrade build frontends first
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel meson-python cython
+
+# Install Python 3.14-compatible modern module versions
 RUN pip install --no-cache-dir \
-    numpy \
-    orjson \
-    redis \
-    pyjwt \
-    scipy \
-    pandas
+    requests>=2.32.3 \
+    redis==8.0.1 \
+    PyJWT==2.13.0 \
+    orjson==3.11.9 \
+    "numpy>=2.1.0" \
+    "pandas>=2.2.3" \
+    "scipy>=1.14.0"
 
 CMD ["bash"]
