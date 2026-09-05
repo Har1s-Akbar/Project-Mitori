@@ -63,6 +63,10 @@ def connect_and_sterilize_redis() -> redis.Redis:
 
 def mint_users_and_seed_cache(r: redis.Redis) -> list[str]:
     print(f"Minting {NUM_USERS} deterministic users and populating balances...")
+    SYSTEM_MULTIPLIER = 100_000_000  # 10^8
+
+    raw_cash = 1_000_000 * SYSTEM_MULTIPLIER     
+    raw_shares = 10_000 * SYSTEM_MULTIPLIER      
     user_tokens = []
     pipeline = r.pipeline(transaction=False)
     static_exp = datetime.now(timezone.utc) + timedelta(days=30)
