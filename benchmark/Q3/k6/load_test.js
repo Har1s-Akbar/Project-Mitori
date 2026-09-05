@@ -10,8 +10,8 @@ const CONFIG = {
   BASE_URL: __ENV.ENGINE_URL || __ENV.BASE_URL || 'http://mitori_engine:8000',
   DATA_PATH: __ENV.DATA_PATH || '/app/benchmark/data/Q3/test.json',
   CSV_OUTPUT_PATH: __ENV.CSV_OUTPUT_PATH || '/app/benchmark/data/Q3/results/trial_output.csv',
-  PRE_ALLOCATED_VUS: 100,
-  MAX_VUS: 400,
+  PRE_ALLOCATED_VUS: parseInt(__ENV.PRE_ALLOCATED_VUS || '100', 10),
+  MAX_VUS: parseInt(__ENV.MAX_VUS || '1000', 10), // Raised to 1000 to prevent VU exhaustion under queueing
 };
 
 const orderStream = new SharedArray('order_stream', function () {
@@ -33,11 +33,12 @@ export const options = {
       maxVUs: CONFIG.MAX_VUS,
     },
   },
+  // Explicitly enables p(99) metric calculation across all Trends
+  summaryTrendStats: ['min', 'avg', 'med', 'p(90)', 'p(95)', 'p(99)', 'max'],
   discardResponseBodies: true,
 };
 
 export default function () {
-  // Correct iteration access via exec.scenario and bounded with modulo
   const index = exec.scenario.iterationInTest % orderStream.length;
   const item = orderStream[index];
 

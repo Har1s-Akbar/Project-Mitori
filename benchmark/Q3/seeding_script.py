@@ -21,11 +21,6 @@ REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 raw_db_index = os.getenv("REDIS_DB_INDEX", 1)
 
-SYSTEM_MULTIPLIER = 100_000_000
-
-raw_cash = 1_000_000 * SYSTEM_MULTIPLIER     
-raw_shares = 10_000 * SYSTEM_MULTIPLIER      
-
 try:
     REDIS_DB_INDEX = int(raw_db_index)
 except ValueError:
