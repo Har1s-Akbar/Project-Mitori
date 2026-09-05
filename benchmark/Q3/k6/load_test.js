@@ -63,9 +63,8 @@ export default function () {
   check(res, {
     'status is 200': (r) => r.status === 200,
   });
-
-  const rawEngineNs = res.headers['X-Engine-Latency-NS'] || res.headers['x-engine-latency-ns'];
-  const rawTotalNs = res.headers['X-Total-Process-NS'] || res.headers['x-total-process-ns'];
+  const rawEngineNs = res.headers['X-Engine-Latency-Ns'] || res.headers['X-Engine-Latency-NS'] || res.headers['x-engine-latency-ns'];
+  const rawTotalNs = res.headers['X-Total-Process-Ns'] || res.headers['X-Total-Process-NS'] || res.headers['x-total-process-ns'];
 
   if (rawEngineNs) {
     engineLatencyTrend.add(parseInt(rawEngineNs, 10));
