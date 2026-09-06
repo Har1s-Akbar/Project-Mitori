@@ -74,7 +74,6 @@ export default function () {
   }
 }
 
-// Goja-compatible string padding helper (ES5 safe)
 function padLeft(value, targetLength) {
   var str = String(value !== undefined && value !== null ? value : '');
   while (str.length < targetLength) {
