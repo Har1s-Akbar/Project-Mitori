@@ -55,7 +55,7 @@ class MitoriGateway:
             max_authorized_funds=max_funds_scaled
         )
         ending_time = time.perf_counter_ns()
-        engine_latency = starting_time - ending_time
+        engine_latency = ending_time-starting_time
 
         processed_trades = []
         for t in raw_trades:
