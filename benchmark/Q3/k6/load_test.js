@@ -11,7 +11,7 @@ const CONFIG = {
   DATA_PATH: __ENV.DATA_PATH || '/app/benchmark/data/Q3/test.json',
   CSV_OUTPUT_PATH: __ENV.CSV_OUTPUT_PATH || '/app/benchmark/data/Q3/results/trial_output.csv',
   PRE_ALLOCATED_VUS: parseInt(__ENV.PRE_ALLOCATED_VUS || '100', 10),
-  MAX_VUS: parseInt(__ENV.MAX_VUS || '1000', 10), // Raised to 1000 to prevent VU exhaustion under queueing
+  MAX_VUS: parseInt(__ENV.MAX_VUS || '1000', 10), 
 };
 
 const orderStream = new SharedArray('order_stream', function () {
