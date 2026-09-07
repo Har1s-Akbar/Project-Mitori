@@ -45,6 +45,8 @@ benchmark/data/cpp_test_data/*_RAW.csv
 test_engine.exe
 *.exe
 
+*_raw_parquet_*
+
 # CMake Build Artifacts (Optimal Solution: Ignore entire folder)
 build/
 .cmake/

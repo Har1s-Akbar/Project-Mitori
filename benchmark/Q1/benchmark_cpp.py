@@ -8,6 +8,7 @@ from decimal import Decimal
 import uuid
 import concurrent.futures
 import sys
+import pandas as pd
 
 sys.path.append('/app/mitori_engine/core_cpp/build/') 
 import mitori_engine_cpp
@@ -16,7 +17,7 @@ N_TRIALS = 5
 PRECISION_MULTIPLIER = Decimal('100000000')
 TOTAL_TARGET_RPS = 600_000
 DURATION_SEC = 30
-THREAD_COUNTS = [1,2, 4]
+THREAD_COUNTS = [1, 2, 4]
 
 def load_json(filepath: str) -> list:
     with open(filepath, "rb") as f:
@@ -34,6 +35,32 @@ def log_to_csv(filepath: str, data_row: list):
                 "Start_Depth", "End_Depth"
             ])
         writer.writerow(data_row)
+
+def log_raw_q1_parquet(base_folder: str, depth: str, threads: int, trial: int, thread_id: int, service_arr: np.ndarray, queue_arr: np.ndarray):
+    """Saves thread telemetry as a highly compressed binary Parquet chunk."""
+    num_rows = len(service_arr)
+    if num_rows == 0:
+        return
+
+    os.makedirs(base_folder, exist_ok=True)
+    
+    df = pd.DataFrame({
+        "Depth": depth,
+        "Threads": threads,
+        "Trial": trial,
+        "Thread_ID": thread_id,
+        "Request_Index": np.arange(num_rows, dtype=np.int32),
+        "Service_Latency_ns": service_arr,
+        "Queue_Latency_ns": queue_arr
+    })
+
+    df["Depth"] = df["Depth"].astype("category")
+    df["Threads"] = df["Threads"].astype(np.int8)
+    df["Trial"] = df["Trial"].astype(np.int8)
+    df["Thread_ID"] = df["Thread_ID"].astype(np.int8)
+
+    filename = f"{base_folder}/tier_{depth}_th_{threads}_tr_{trial}_id_{thread_id}.parquet"
+    df.to_parquet(filename, engine='pyarrow', compression='snappy', index=False)
 
 def unbox_order_to_cpp_dict(raw_order: dict) -> dict:
     parsed = raw_order.copy()
@@ -122,8 +149,8 @@ def stream_to_numpy_dict(raw_orders: list) -> dict:
         "max_authorized_funds": max_f
     }
 
-def run_q1_matrix(tier_name: str, seed_file_path: str, raw_active_stream: list, csv_filename: str):
-    print(f"--- Starting C++ Q1 Benchmark for {tier_name} Depth ---")
+def run_q1_matrix(tier_name: str, seed_file_path: str, raw_active_stream: list, csv_filename: str, parquet_folder: str):
+    print(f"\n--- Starting C++ Q1 Benchmark for {tier_name} Depth ---")
     
     resting_orders = load_json(seed_file_path)
     cpp_resting_orders = [unbox_order_to_cpp_dict(o) for o in resting_orders]
@@ -174,14 +201,18 @@ def run_q1_matrix(tier_name: str, seed_file_path: str, raw_active_stream: list, 
             all_queue_times = []
             total_processed = 0
             
-            for future in futures:
+            for thread_id, future in enumerate(futures):
                 srv_np, que_np, processed = future.result()
-                all_service_times.append(srv_np[:processed])
-                all_queue_times.append(que_np[:processed])
+                t_srv = srv_np[:processed]
+                t_que = que_np[:processed]
+                
+                all_service_times.append(t_srv)
+                all_queue_times.append(t_que)
                 total_processed += processed
                 
+                log_raw_q1_parquet(parquet_folder, tier_name, thread_count, trial, thread_id, t_srv, t_que)
+                
             end_depth = sum(engine.get_book_depth()) if isinstance(engine.get_book_depth(), tuple) else engine.get_book_depth()
-            
             actual_rps = total_processed / DURATION_SEC
             
             if len(all_service_times) > 0:
@@ -211,7 +242,7 @@ def run_q1_matrix(tier_name: str, seed_file_path: str, raw_active_stream: list, 
                 start_depth, end_depth
             ])
             
-            del engine
+            del engine, all_service_times, all_queue_times
             mitori_engine_cpp.cleanup_memory()
             gc.collect()
 
@@ -221,6 +252,7 @@ def main():
 
     timestamp = int(time.time())
     csv_filename = f"benchmark/data/cpp_test_data/q1_cpp_matrix_{timestamp}.csv"
+    parquet_folder = f"benchmark/data/cpp_test_data/cpp_q1_raw_parquet_{timestamp}"
     
     tiers = [
         ("1k", "benchmark/data/data_for_test/seed_1k.json"),
@@ -229,7 +261,7 @@ def main():
     ]
     
     for tier_name, filepath in tiers:
-        run_q1_matrix(tier_name, filepath, raw_active_stream, csv_filename)
+        run_q1_matrix(tier_name, filepath, raw_active_stream, csv_filename, parquet_folder)
         
 if __name__ == "__main__":
     main()

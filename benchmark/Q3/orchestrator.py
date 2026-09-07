@@ -4,6 +4,7 @@ import time
 import subprocess
 import argparse
 from pathlib import Path
+import numpy as np
 import pandas as pd
 import requests
 from requests.exceptions import RequestException
@@ -48,26 +49,12 @@ def sterilize_environment():
     except Exception as e:
         print(f"  [Critical] Redis seeding failed: {e}")
 
-def run_warmup():
-    print("\n" + "="*80)
-    print(">>> EXECUTING UNTIMED WARM-UP (5,000 orders) <<<")
-    print("="*80)
-    sterilize_environment()
-    
-    cmd = [
-        "k6", "run",
-        "-e", "TARGET_RPS=1000",
-        "-e", "DURATION=5s",
-        "-e", f"DATA_PATH=/app/benchmark/data/data_for_test/warmup.json",
-        "-e", f"CSV_OUTPUT_PATH=/app/benchmark/data/python_test_data/warmup_summary_{int(time.time())}.csv",
-        "/app/benchmark/Q3/k6/load_test.js"
-    ]
-    subprocess.run(cmd, check=True)
-    time.sleep(3)
-
 def run_matrix(engine_label: str, rps_tiers: list[int], trials: int):
     results = []
     run_timestamp = int(time.time())
+    
+    raw_parquet_dir = RESULTS_DIR / f"{engine_label}_q3_raw_parquet_{run_timestamp}"
+    raw_parquet_dir.mkdir(parents=True, exist_ok=True)
     
     for rps in rps_tiers:
         for trial in range(1, trials + 1):
@@ -77,10 +64,12 @@ def run_matrix(engine_label: str, rps_tiers: list[int], trials: int):
             
             sterilize_environment()
             
-            temp_csv = RESULTS_DIR / f"temp_{engine_label}_{rps}rps_trial{trial}_{run_timestamp}.csv"
+            temp_csv = RESULTS_DIR / f"temp_summary_{engine_label}_{rps}rps_trial{trial}_{run_timestamp}.csv"
+            temp_raw_k6_csv = RESULTS_DIR / f"temp_raw_{engine_label}_{rps}rps_trial{trial}_{run_timestamp}.csv"
             
             cmd = [
                 "k6", "run",
+                "--out", f"csv={temp_raw_k6_csv}",
                 "-e", f"TARGET_RPS={rps}",
                 "-e", "DURATION=30s",
                 "-e", "DATA_PATH=/app/benchmark/data/data_for_test/test.json",
@@ -96,11 +85,12 @@ def run_matrix(engine_label: str, rps_tiers: list[int], trials: int):
                 print(f"ERROR: Tier {rps} RPS Trial {trial} failed with exit code {res.returncode}")
                 if temp_csv.exists():
                     temp_csv.unlink()
+                if temp_raw_k6_csv.exists():
+                    temp_raw_k6_csv.unlink()
                 continue
                 
             if temp_csv.exists():
                 df = pd.read_csv(temp_csv)
-                
                 df["engine"] = engine_label
                 df["target_rps"] = rps
                 df["trial"] = trial
@@ -110,8 +100,26 @@ def run_matrix(engine_label: str, rps_tiers: list[int], trials: int):
                 df = df[leading_cols + metric_cols]
                 
                 results.append(df)
-                
                 temp_csv.unlink()
+
+            if temp_raw_k6_csv.exists():
+                print("  [Data] Compressing raw k6 telemetry to Parquet...")
+                df_raw = pd.read_csv(
+                    temp_raw_k6_csv, 
+                    usecols=["metric_name", "timestamp", "metric_value"]
+                )
+                
+                target_metrics = ["http_req_duration", "engine_latency_ns", "total_process_ns"]
+                df_filtered = df_raw[df_raw["metric_name"].isin(target_metrics)].copy()
+                
+                df_filtered["engine"] = engine_label
+                df_filtered["target_rps"] = np.int32(rps)
+                df_filtered["trial"] = np.int8(trial)
+                df_filtered["metric_name"] = df_filtered["metric_name"].astype("category")
+                
+                parquet_filename = raw_parquet_dir / f"tier_{rps}_tr_{trial}.parquet"
+                df_filtered.to_parquet(parquet_filename, engine='pyarrow', compression='snappy', index=False)
+                temp_raw_k6_csv.unlink()
             
             print("  [Cooldown] Waiting 5 seconds to drain network sockets...")
             time.sleep(5)
@@ -139,6 +147,7 @@ def run_matrix(engine_label: str, rps_tiers: list[int], trials: int):
         print(f"AGGREGATED SUMMARY MATRIX: {engine_label}")
         print("="*80)
         print(summary_df[["target_rps", "metric", "med", "p90", "p99", "max"]].to_string(index=False))
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Mitori Automated Benchmark Harness")
     parser.add_argument("--engine", choices=["PYTHON", "CPP"], required=True, help="Active matching engine mode")

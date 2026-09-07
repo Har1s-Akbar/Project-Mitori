@@ -29,6 +29,7 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel meson-python cytho
 RUN pip install --no-cache-dir \
     requests>=2.32.3 \
     redis==8.0.1 \
+    pyarrow==25.0.1\
     PyJWT==2.13.0 \
     orjson==3.11.9 \
     "numpy>=2.1.0" \
