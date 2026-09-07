@@ -256,3 +256,10 @@ Order sequences are synthesized using a predefined pseudorandom number generator
 
 ### 4.5.2 Replay
 generated orders will be saved in a file and saved on disk , load generator will load it serialize it into ordered JSON and fire it at the system, that way will make sure that both engine get identical data and increasing the credibility of the answered questions at the same time.
+
+## 5. Benchmarking Phase
+under the above conditions, pre-requisites and experimental methodology benchmarking phase of each question was ran properly, for each benchmarking it was made sure that specified configuration was and along with that several changes were made along the way in the engine as well to make them benchmarking ready.
+Benchmarking phase is thoroughly and completely documented in the `RESEARCH_LOG` folder. Please reference it for complete benchmarking and telemetry analysis.
+
+## 6. Results and Analysis
+After a multi week benchmarking phase which was goining on for the better part of the August and the starting days of the Septemeber , Benchmarking officially cocnluded and now this  section deals with the resulsts and analysis of the benchmarking , as mentioned in the experimental methododlogy section 4.4.5.

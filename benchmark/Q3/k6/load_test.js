@@ -33,7 +33,6 @@ export const options = {
       maxVUs: CONFIG.MAX_VUS,
     },
   },
-  // Explicitly enables p(99) metric calculation across all Trends
   summaryTrendStats: ['min', 'avg', 'med', 'p(90)', 'p(95)', 'p(99)', 'max'],
   discardResponseBodies: true,
 };
