@@ -1,0 +1,4 @@
+Depth_Tier,Python_Median_ns,CPP_Median_ns,MWU_p_value,Effect_Size_r,Python_p99_CI_Low,Python_p99_CI_High,CPP_p99_CI_Low,CPP_p99_CI_High
+1k,"3,299",75,< 0.001,1.000,"19,999","22,167",447,504
+25k,"4,463",70,< 0.001,1.000,"53,072","66,034",790,881
+50k,"3,708",72,< 0.001,0.999,"28,185","30,912","1,084","1,203"
