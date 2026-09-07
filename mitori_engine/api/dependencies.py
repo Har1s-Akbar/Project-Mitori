@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-ENGINE_MODE = os.getenv("ENGINE_MODE", "CPP").upper()
+ENGINE_MODE = os.getenv("ENGINE_MODE", "PYTHON").upper()
 
 async def get_redis(requests:Request) ->redis.Redis:
     return requests.app.state.redis

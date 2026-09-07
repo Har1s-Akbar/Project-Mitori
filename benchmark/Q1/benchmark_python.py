@@ -5,6 +5,7 @@ import numpy as np
 import os
 import csv
 import concurrent.futures
+import pandas as pd
 from decimal import Decimal
 
 from mitori_engine.core_python.engine import OrderBook
@@ -39,6 +40,28 @@ def log_q1_to_csv(filepath: str, data_row: list):
             writer.writerow(["Depth", "Threads", "Trial", "Throughput_RPS", "Service_P50_ns", "Service_P99_ns", "Queue_P50_ns", "Queue_P99_ns"])
         writer.writerow(data_row)
 
+def log_raw_q1_parquet(base_folder: str, depth: str, threads: int, trial: int, thread_id: int, service_arr: np.ndarray, queue_arr: np.ndarray):
+    """Saves thread telemetry as a highly compressed binary Parquet chunk."""
+    os.makedirs(base_folder, exist_ok=True)
+    num_rows = len(service_arr)
+    
+    df = pd.DataFrame({
+        "Depth": depth,
+        "Threads": threads,
+        "Trial": trial,
+        "Thread_ID": thread_id,
+        "Request_Index": np.arange(num_rows, dtype=np.int32),
+        "Service_Latency_ns": service_arr,
+        "Queue_Latency_ns": queue_arr
+    })
+
+    df["Depth"] = df["Depth"].astype("category")
+    df["Threads"] = df["Threads"].astype(np.int8)
+    df["Trial"] = df["Trial"].astype(np.int8)
+    df["Thread_ID"] = df["Thread_ID"].astype(np.int8)
+
+    filename = f"{base_folder}/tier_{depth}_th_{threads}_tr_{trial}_id_{thread_id}.parquet"
+    df.to_parquet(filename, engine='pyarrow', compression='snappy', index=False)
 def log_snapshots_to_csv(filepath: str, depth: str, threads: int, trial: int, snapshots: np.ndarray, count: int):
     file_exists = os.path.isfile(filepath)
     with open(filepath, mode='a', newline='') as f:
@@ -56,7 +79,7 @@ def log_snapshots_to_csv(filepath: str, depth: str, threads: int, trial: int, sn
                 snapshots[i, 2]  
             ])
 
-def q1_worker(engine: OrderBook, orders: list) -> tuple[np.ndarray, np.ndarray, int, np.ndarray, int]:
+def q1_worker(engine: OrderBook, orders: list, thread_id:int) -> tuple[np.ndarray, np.ndarray, int, np.ndarray, int, int]:
     """Injects at 10k RPS and records independent service/queue latencies."""
     gc.disable()
 
@@ -84,6 +107,7 @@ def q1_worker(engine: OrderBook, orders: list) -> tuple[np.ndarray, np.ndarray, 
 
     next_snapshot = start_wall + snapshot_interval
     snapshot_index = 0
+    
     while time.perf_counter_ns() < end_wall:
         if processed_count >= max_expected_orders:
             break
@@ -103,11 +127,10 @@ def q1_worker(engine: OrderBook, orders: list) -> tuple[np.ndarray, np.ndarray, 
         
         while time.perf_counter_ns() < expected_arrival:
             pass        
-        arrival_time = time.perf_counter_ns()
         
+        arrival_time = time.perf_counter_ns()
         process(order)
         completion_time = time.perf_counter_ns()
-
         
         service_times[processed_count] = completion_time - arrival_time
         queue_times[processed_count] = completion_time - expected_arrival
@@ -115,15 +138,18 @@ def q1_worker(engine: OrderBook, orders: list) -> tuple[np.ndarray, np.ndarray, 
             
     gc.enable()
             
-    return service_times[:processed_count], queue_times[:processed_count], processed_count, snapshot_array, snapshot_index
+    return service_times[:processed_count], queue_times[:processed_count], processed_count, snapshot_array, snapshot_index, thread_id
 
 def run_q1_matrix():
     print("Loading active stream orders...")
     raw_active_stream = load_json("benchmark/data/data_for_test/active_stream_for_q1.json")
     active_stream = [unbox_order(order) for order in raw_active_stream[:RING_BUFFER_SIZE]]
     
-    csv_filename = f"benchmark/data/python_test_data/python_q1_throughput_{int(time.time())}.csv"
-    snapshot_csv = f"benchmark/data/python_test_data/python_q1_snapshots_{int(time.time())}.csv"
+    timestamp = int(time.time())
+    csv_filename = f"benchmark/data/python_test_data/python_q1_throughput_{timestamp}.csv"
+    snapshot_csv = f"benchmark/data/python_test_data/python_q1_snapshots_{timestamp}.csv"
+    parquet_folder = f"benchmark/data/python_test_data/python_q1_raw_parquet_{timestamp}"
+    
     tiers = [
         ("1k", "benchmark/data/data_for_test/seed_1k.json"),
         ("25k", "benchmark/data/data_for_test/seed_25k.json"),
@@ -145,7 +171,7 @@ def run_q1_matrix():
                 gc.collect()
                 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=thread_count) as executor:
-                    futures = [executor.submit(q1_worker, engine, active_stream) for _ in range(thread_count)]
+                    futures = [executor.submit(q1_worker, engine, active_stream, i) for i in range(thread_count)]
                     results = [f.result() for f in concurrent.futures.as_completed(futures)]
                 
                 all_service = np.concatenate([r[0] for r in results])
@@ -161,6 +187,13 @@ def run_q1_matrix():
                 print(f" Trial {trial}/5 -> RPS: {max_rps:,.0f} | Q-P99: {q_p99:,.0f} ns | S-P50: {s_p50:,.0f} ns")
                 log_q1_to_csv(csv_filename, [tier_name, thread_count, trial, max_rps, s_p50, s_p99, q_p50, q_p99])
                 log_snapshots_to_csv(snapshot_csv, tier_name, thread_count, trial, thread_0_snapshots, thread_0_snap_count)
+                
+                for res in results:
+                    t_service = res[0]
+                    t_queue = res[1]
+                    t_id = res[5]
+                    log_raw_q1_parquet(parquet_folder, tier_name, thread_count, trial, t_id, t_service, t_queue)
+                
                 del engine
                 gc.collect()
 
