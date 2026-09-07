@@ -56,10 +56,8 @@ def compute_q2_statistics(py_arr: np.ndarray, cpp_arr: np.ndarray, tier: str) ->
     n1, n2 = len(cpp_arr), len(py_arr)
     r = 1 - (2 * mwu_res.statistic / (n1 * n2))
     
-    # Format the underflowed p-value for academic thesis standards
     p_val_str = "< 0.001" if mwu_res.pvalue == 0.0 else f"{mwu_res.pvalue:.5e}"
 
-    # Bootstrapped 95% Confidence Intervals
     py_boot = np.random.choice(py_arr, size=min(len(py_arr), SAMPLE_SIZE_BOOTSTRAP), replace=False)
     cpp_boot = np.random.choice(cpp_arr, size=min(len(cpp_arr), SAMPLE_SIZE_BOOTSTRAP), replace=False)
 
