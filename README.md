@@ -80,7 +80,7 @@ Everything on this diagram runs inside Docker with health-checked startup orderi
 
 C++ can match orders on the order of nanoseconds thanks to its speed and closeness to the machine. That much isn't in question. What's actually in question is whether that speedup survives being embedded in a decoupled, polyglot system: does cross-process communication overhead consume more time than a raw Python matching loop saves?
 
-Project Mitori exists to answer that with real numbers, not intuition — baseline Python latency measured first, then a C++ rewrite of the matching core measured the same way, with the comparison written up as a short research report. That work is in progress; the methodology document is scaffolded at [`docs/RESEARCH.md`](docs/RESEARCH.md).
+Project Mitori exists to answer that with scientific reasoning and data, — baseline Python latency measured first, then a C++ rewrite of the matching core measured the same way, with the comparison written up as a short research report. That work is done with proper methododlogy and constraints; the methodology document is scaffolded at [`docs/RESEARCH.md`](docs/RESEARCH.md).
 
 ## Tech stack
 
