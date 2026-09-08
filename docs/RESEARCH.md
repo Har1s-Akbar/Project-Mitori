@@ -285,7 +285,7 @@ All statistical comparisons use the two-sided Mann-Whitney U test (α = 0.05) wi
 
 **Key Finding — C++ Mutex Thrashing:** C++ scales linearly from 1→2 threads (600k → 938k–1,070k RPS) but collapses at 4 threads (753k–810k RPS). The mutex contention overhead at 4 threads wastes ~30% of the theoretical throughput gain. The saturation point for C++ is **2 threads** under this workload.
 
-![Q1 Throughput Scaling](analysis/plots/q1_throughput_scaling.png)
+![Q1 Throughput Scaling](benchmark\analysis\plots\q1_throughput_scaling.png)
 *Figure 1: Q1 throughput scaling across thread counts and book depths. C++ speedup annotated.*
 
 
@@ -331,7 +331,7 @@ This counter-intuitive result occurs because:
 
 **Implication:** For latency-sensitive systems with &gt;2 concurrent matching threads, Python's GIL may produce more predictable tail latency than a naive mutex-based C++ implementation. A lock-free or sharded C++ design would be required to reclaim the advantage.
 
-![Q1 Queue Latency](benchmark/analysis/plots/q1_queue_latency.png)
+![Q1 Queue Latency](benchmark\analysis\plots\q1_queue_latency.png)
 *Figure 2: Q1 queue residence time (P50, log scale). Python orders wait 9–13 seconds; C++ orders wait 20–178 milliseconds.*
 
 ---
@@ -346,7 +346,7 @@ This counter-intuitive result occurs because:
 
 **H2 Accepted.** In isolated single-threaded execution, C++ is **44–64× faster** than Python at pure matching. The P99 CIs do not overlap at any depth. The C++ `ArenaAllocator` + index-based `std::priority_queue` consistently outperforms Python's tuple-based `heapq`.
 
-![Q2 Isolated Latency](benchmark/analysis/plots/q2_isolated_latency.png)
+![Q2 Isolated Latency](benchmark\analysis\plots\q2_isolated_latency.png)
 *Figure 3: Q2 isolated matching latency with bootstrapped 95% P99 CIs. C++ is 44–64× faster.*
 
 ---
@@ -374,7 +374,7 @@ The matching engine accounts for **less than 0.001%** of total API latency. Opti
 
 **The 5-Second Wall:** Both engines show `http_req_duration` clustering at ~5,000 ms for high percentiles. This is the k6 client timeout, not server processing time. The single-threaded ASGI server (Uvicorn) has a theoretical ceiling of ~40–50 RPS for CPU Bound requests. Loads of 500–5,000 RPS instantly saturate the TCP listen backlog. Requests wait in OS queues until timeout.
 
-![Q3 Paradox](benchmark/analysis/plots/q3_paradox.png)
+![Q3 Paradox](benchmark\analysis\plots\q3_paradox.png)
 *Figure 4: Q3 engine latency vs. HTTP latency. The ~50× engine speedup vanishes in the full system.*
 
 
@@ -406,7 +406,7 @@ The matching engine accounts for **less than 0.001%** of total API latency. Opti
 2. **Quantification of Amdahl's Law** in a real trading system. The engine contribution ratio is <0.001%, making language rewrites economically irrational.
 3. **A reproducible benchmarking framework** for polyglot microservices, including deterministic replay, controlled variables, and non-parametric statistical testing.
 
-![Synthesis](benchmark/analysis/plots/synthesis_attenuation.png)
+![Synthesis](benchmark\analysis\plots\synthesis_attenuation.png)
 *Figure 5: Cross-question synthesis. C++ advantage attenuates from 50× → 3× → <0.001% as system scope expands.*
 
 ### 7.3 Limitations
