@@ -80,7 +80,7 @@ Everything on this diagram runs inside Docker with health-checked startup orderi
 
 C++ can match orders on the order of nanoseconds thanks to its speed and closeness to the machine. That much isn't in question. What's actually in question is whether that speedup survives being embedded in a decoupled, polyglot system: does cross-process communication overhead consume more time than a raw Python matching loop saves?
 
-Project Mitori exists to answer that with real numbers, not intuition — baseline Python latency measured first, then a C++ rewrite of the matching core measured the same way, with the comparison written up as a short research report. That work is in progress; the methodology document is scaffolded at [`docs/RESEARCH.md`](docs/RESEARCH.md).
+Project Mitori exists to answer that with scientific reasoning and data, — baseline Python latency measured first, then a C++ rewrite of the matching core measured the same way, with the comparison written up as a short research report. That work is done with proper methododlogy and constraints; the methodology document is scaffolded at [`docs/RESEARCH.md`](docs/RESEARCH.md).
 
 ## Tech stack
 
@@ -300,12 +300,12 @@ docker compose up --build
 - [x] Unit + integration + concurrency test suites
 - [x] Full Docker Compose orchestration with health-checked startup
 - [x] CI pipeline against real Postgres/Redis service containers
+- [x] Benchmark harness + Python baseline latency measurement
+- [x] C++ matching engine rewrite
+- [x] Research write-up answering the Network vs Execution Paradox question ([`docs/RESEARCH.md`](docs/RESEARCH.md))
 
 **In progress**
-- [ ] Benchmark harness + Python baseline latency measurement
-- [ ] C++ matching engine rewrite
-- [ ] Research write-up answering the Network vs Execution Paradox question ([`docs/RESEARCH.md`](docs/RESEARCH.md))
-
+- [] Submission for publication
 **Not started**
 - [ ] Rate limiting / DDoS protection
 - [ ] Full KYC verification workflow (a `kyc_verified` flag is already enforced at the auth layer — trading is blocked until it's `true` — but the actual verification flow behind that flag doesn't exist yet)
