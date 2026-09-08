@@ -300,12 +300,12 @@ docker compose up --build
 - [x] Unit + integration + concurrency test suites
 - [x] Full Docker Compose orchestration with health-checked startup
 - [x] CI pipeline against real Postgres/Redis service containers
+- [x] Benchmark harness + Python baseline latency measurement
+- [x] C++ matching engine rewrite
+- [x] Research write-up answering the Network vs Execution Paradox question ([`docs/RESEARCH.md`](docs/RESEARCH.md))
 
 **In progress**
-- [ ] Benchmark harness + Python baseline latency measurement
-- [ ] C++ matching engine rewrite
-- [ ] Research write-up answering the Network vs Execution Paradox question ([`docs/RESEARCH.md`](docs/RESEARCH.md))
-
+- [] Submission for publication
 **Not started**
 - [ ] Rate limiting / DDoS protection
 - [ ] Full KYC verification workflow (a `kyc_verified` flag is already enforced at the auth layer — trading is blocked until it's `true` — but the actual verification flow behind that flag doesn't exist yet)
