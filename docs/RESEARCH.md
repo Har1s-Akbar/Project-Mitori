@@ -374,7 +374,7 @@ The matching engine accounts for **less than 0.001%** of total API latency. Opti
 
 **The 5-Second Wall:** Both engines show `http_req_duration` clustering at ~5,000 ms for high percentiles. This is the k6 client timeout, not server processing time. The single-threaded ASGI server (Uvicorn) has a theoretical ceiling of ~40–50 RPS for CPU Bound requests. Loads of 500–5,000 RPS instantly saturate the TCP listen backlog. Requests wait in OS queues until timeout.
 
-![Q3 Paradox](/benchmark\analysis\plots\q3_paradox.png)
+![Q3 Paradox](/benchmark/analysis/plots/q3_paradox.png)
 *Figure 4: Q3 engine latency vs. HTTP latency. The ~50× engine speedup vanishes in the full system.*
 
 
@@ -406,7 +406,7 @@ The matching engine accounts for **less than 0.001%** of total API latency. Opti
 2. **Quantification of Amdahl's Law** in a real trading system. The engine contribution ratio is <0.001%, making language rewrites economically irrational.
 3. **A reproducible benchmarking framework** for polyglot microservices, including deterministic replay, controlled variables, and non-parametric statistical testing.
 
-![Synthesis](/benchmark\analysis\plots\synthesis_attenuation.png)
+![Synthesis](/benchmark/analysis/plots/synthesis_attenuation.png)
 *Figure 5: Cross-question synthesis. C++ advantage attenuates from 50× → 3× → <0.001% as system scope expands.*
 
 ### 7.3 Limitations
