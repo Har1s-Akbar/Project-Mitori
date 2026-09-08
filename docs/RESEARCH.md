@@ -265,9 +265,9 @@ Benchmarking phase is thoroughly and completely documented in the `RESEARCH_LOG`
 After a multi week benchmarking phase which was goining on for the better part of the August and the starting days of the Septemeber , Benchmarking officially cocnluded and now this  section deals with the resulsts and analysis of the benchmarking , as mentioned in the experimental methododlogy section 4.4.5.
 All statistical comparisons use the two-sided Mann-Whitney U test (α = 0.05) with rank-biserial effect size *r*, and bootstrapped 95% confidence intervals on the P99 latency (10,000 subsamples, 1,000 resamples, percentile method). Effect sizes are interpreted as: |r| &lt; 0.3 (small), 0.3–0.5 (medium), &gt; 0.5 (large).
 
-### 5.1 Q1 — Throughput & Concurrency Scaling
+### 6.1 Q1 — Throughput & Concurrency Scaling
 
-#### 5.1.1 Throughput Comparison
+#### 6.1.1 Throughput Comparison
 
 | Depth | Threads | Python RPS | C++ RPS | C++ Speedup |
 |:-----:|:-------:|:----------:|:-------:|:-----------:|
@@ -289,40 +289,40 @@ All statistical comparisons use the two-sided Mann-Whitney U test (α = 0.05) wi
 *Figure 1: Q1 throughput scaling across thread counts and book depths. C++ speedup annotated.*
 
 
-#### 5.1.2 Service Latency (Inside the Engine)
+#### 6.1.2 Service Latency
 
-| Depth | Threads | Python P50 (ns) | C++ P50 (ns) | Effect Size *r* | Interpretation |
-|:-----:|:-------:|:---------------:|:------------:|:---------------:|:--------------:|
-| 1k    | 1       | 2,112           | 237          | 1.000           | C++ dominates  |
-| 1k    | 2       | 2,093           | 304          | 0.909           | C++ dominates  |
-| 1k    | 4       | 2,130           | 403          | 0.668           | C++ advantage shrinking |
-| 25k   | 1       | 2,081           | 265          | 1.000           | C++ dominates  |
-| 25k   | 2       | 2,120           | 363          | 0.942           | C++ dominates  |
-| 25k   | 4       | 2,124           | 474          | 0.442           | **Medium effect** |
-| 50k   | 1       | 2,056           | 816          | 0.049           | **Negligible** |
-| 50k   | 2       | 2,175           | 498          | 0.598           | C++ advantage  |
-| 50k   | 4       | 2,188           | 433          | 0.349           | **Small effect** |
+| Depth | Threads | Python P50 (ns) | Python P99 95% CI (ns) | C++ P50 (ns) | C++ P99 95% CI (ns) | Effect Size *r* | Interpretation |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| 1k | 1 | 2,112 | [7,461, 9,745] | 237 | [328, 328] | 1.000 | C++ dominates |
+| 1k | 2 | 2,093 | [4,954, 5,821] | 304 | [804, 804] | 0.909 | C++ dominates |
+| 1k | 4 | 2,130 | [5,400, 6,176] | 403 | [1,671, 1,671] | 0.668 | C++ advantage shrinking |
+| 25k | 1 | 2,081 | [7,666, 12,445] | 265 | [410, 410] | 1.000 | C++ dominates |
+| 25k | 2 | 2,120 | [7,762, 11,947] | 363 | [583, 583] | 0.942 | C++ dominates |
+| 25k | 4 | 2,124 | [7,331, 9,273] | 474 | [20,715, 20,715] | 0.442 | **Medium effect** |
+| 50k | 1 | 2,056 | [5,887, 8,497] | 816 | [905, 905] | 0.049 | **Negligible** |
+| 50k | 2 | 2,175 | [12,893, 16,215] | 498 | [5,148, 5,148] | 0.598 | C++ advantage |
+| 50k | 4 | 2,188 | [12,220, 15,608] | 433 | [17,157, 17,157] | 0.349 | **Small effect** |
 
 **Key Finding — The GIL-as-Equalizer:** At 50k depth / 1 thread, the effect size drops to *r* = 0.049 — practically negligible. Python's dictionary-based heapq benefits from cache locality at high depth, narrowing the gap with C++'s index-based priority_queue when the working set is large.
 
-#### 5.1.3 Queue Residence Time (The Critical Metric)
 
-| Depth | Threads | Python P50 (ns) | C++ P50 (ns) | Python Delay | Effect Size *r* |
-|:-----:|:-------:|:---------------:|:------------:|:------------:|:---------------:|
-| 1k    | 1       | 9.46×10⁹        | 2.07×10⁷     | **456×**     | 0.995           |
-| 1k    | 2       | 1.15×10¹⁰       | 5.03×10⁷     | **229×**     | 0.988           |
-| 1k    | 4       | 1.06×10¹⁰       | 1.72×10⁸     | **61×**      | 0.975           |
-| 25k   | 1       | 5.33×10⁹        | 2.53×10⁷     | **211×**     | 0.996           |
-| 25k   | 2       | 1.02×10¹⁰       | 7.14×10⁷     | **143×**     | 0.994           |
-| 25k   | 4       | 1.34×10¹⁰       | 1.75×10⁸     | **77×**      | 0.984           |
-| 50k   | 1       | 5.11×10⁹        | 2.24×10⁷     | **228×**     | 0.997           |
-| 50k   | 2       | 1.09×10¹⁰       | 1.14×10⁸     | **96×**      | 0.992           |
-| 50k   | 4       | 1.23×10¹⁰       | 1.78×10⁸     | **69×**      | 0.989           |
+### 6.1.3 Queue Residence Time
+
+| Depth | Threads | Python P50 (ns) | Python P99 95% CI (ns) | C++ P50 (ns) | C++ P99 95% CI (ns) | Python Delay | Effect Size *r* |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| 1k | 1 | 9.46×10⁹ | [1.86×10¹⁰, 1.86×10¹⁰] | 2.07×10⁷ | [2.15×10⁷, 2.15×10⁷] | **456×** | 0.995 |
+| 1k | 2 | 1.15×10¹⁰ | [2.36×10¹⁰, 2.36×10¹⁰] | 5.03×10⁷ | [3.06×10⁸, 3.06×10⁸] | **229×** | 0.988 |
+| 1k | 4 | 1.06×10¹⁰ | [2.68×10¹⁰, 2.70×10¹⁰] | 1.72×10⁸ | [5.80×10⁸, 5.80×10⁸] | **61×** | 0.975 |
+| 25k | 1 | 5.33×10⁹ | [1.15×10¹⁰, 1.15×10¹⁰] | 2.53×10⁷ | [3.03×10⁷, 3.03×10⁷] | **211×** | 0.996 |
+| 25k | 2 | 1.02×10¹⁰ | [2.11×10¹⁰, 2.13×10¹⁰] | 7.14×10⁷ | [9.08×10⁷, 9.08×10⁷] | **143×** | 0.994 |
+| 25k | 4 | 1.34×10¹⁰ | [2.51×10¹⁰, 2.53×10¹⁰] | 1.75×10⁸ | [3.94×10⁸, 3.94×10⁸] | **77×** | 0.984 |
+| 50k | 1 | 5.11×10⁹ | [9.86×10⁹, 9.91×10⁹] | 2.24×10⁷ | [2.62×10⁷, 2.62×10⁷] | **228×** | 0.997 |
+| 50k | 2 | 1.09×10¹⁰ | [2.29×10¹⁰, 2.33×10¹⁰] | 1.14×10⁸ | [2.15×10⁸, 2.15×10⁸] | **96×** | 0.992 |
+| 50k | 4 | 1.23×10¹⁰ | [2.63×10¹⁰, 2.66×10¹⁰] | 1.78×10⁸ | [3.33×10⁸, 3.33×10⁸] | **69×** | 0.989 |
 
 **Key Finding — The Queue Catastrophe:** Python orders spend **9–13 seconds** in queue (P50) under concurrent load, while C++ orders spend **20–178 milliseconds**. The GIL doesn't just limit throughput — it creates a backlog that grows without bound. At 4 threads, Python's queue P99 exceeds **26 seconds**, meaning orders wait 26× longer than the 30-second trial duration.
 
-#### 5.1.4 The Mutex-vs-GIL Crossover (Tail Latency)
-
+#### 6.1.4 The Mutex-vs-GIL
 At 4 threads / 25k depth, C++ service P99 CI = **[20,715, 20,715]** ns, while Python P99 CI = **[7,331, 9,273]** ns. **C++ tail latency is 2.2× worse than Python's.**
 
 This counter-intuitive result occurs because:
@@ -331,70 +331,69 @@ This counter-intuitive result occurs because:
 
 **Implication:** For latency-sensitive systems with &gt;2 concurrent matching threads, Python's GIL may produce more predictable tail latency than a naive mutex-based C++ implementation. A lock-free or sharded C++ design would be required to reclaim the advantage.
 
-![Q1 Queue Latency](analysis/plots/q1_queue_latency.png)
+![Q1 Queue Latency](benchmark/analysis/plots/q1_queue_latency.png)
 *Figure 2: Q1 queue residence time (P50, log scale). Python orders wait 9–13 seconds; C++ orders wait 20–178 milliseconds.*
 
 ---
 
-### 5.2 Q2 — Algorithmic Latency (Single-Threaded)
+### 6.2 Q2 — Algorithmic Latency
 
-| Depth | Python P50 (ns) | C++ P50 (ns) | Speedup | Effect Size *r* | p-value |
-|:-----:|:---------------:|:------------:|:-------:|:---------------:|:-------:|
-| 1k    | 3,299           | 75           | 44×     | 1.000           | &lt; 0.001 |
-| 25k   | 4,463           | 70           | 64×     | 1.000           | &lt; 0.001 |
-| 50k   | 3,708           | 72           | 51×     | 0.999           | &lt; 0.001 |
+| Depth | Python P50 (ns) | Python P99 95% CI (ns) | C++ P50 (ns) | C++ P99 95% CI (ns) | Speedup | Effect Size *r* | p-value |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| 1k | 3,299 | [19,999, 22,167] | 75 | [447, 504] | 44× | 1.000 | < 0.001 |
+| 25k | 4,463 | [53,072, 66,034] | 70 | [790, 881] | 64× | 1.000 | < 0.001 |
+| 50k | 3,708 | [28,185, 30,912] | 72 | [1,084, 1,203] | 51× | 0.999 | < 0.001 |
 
 **H2 Accepted.** In isolated single-threaded execution, C++ is **44–64× faster** than Python at pure matching. The P99 CIs do not overlap at any depth. The C++ `ArenaAllocator` + index-based `std::priority_queue` consistently outperforms Python's tuple-based `heapq`.
 
-![Q2 Isolated Latency](analysis/plots/q2_isolated_latency.png)
+![Q2 Isolated Latency](benchmark/analysis/plots/q2_isolated_latency.png)
 *Figure 3: Q2 isolated matching latency with bootstrapped 95% P99 CIs. C++ is 44–64× faster.*
-
 
 ---
 
-### 5.3 Q3 — Full API Path & The Paradox
+### 6.3 Q3 — Full API Path & The Paradox (with 95% Bootstrapped Confidence Intervals)
 
-| Metric | RPS | Python Median | C++ Median | p-value | Effect Size *r* | C++ Advantage |
-|:-------|:---:|:-------------:|:----------:|:-------:|:---------------:|:-------------:|
-| `engine_latency_ns` | 500  | 6,761 ns | 6,587 ns | 8×10⁻³² | 0.052 | **~3%** |
-| `engine_latency_ns` | 2000 | 6,451 ns | 6,237 ns | 8×10⁻⁷⁰ | 0.075 | **~3%** |
-| `engine_latency_ns` | 5000 | 6,493 ns | 6,290 ns | 3×10⁻⁶⁷ | 0.074 | **~3%** |
-| `http_req_duration` | 500  | 1,280 ms | 1,349 ms | 1.0     | -0.067 | **Python wins** |
-| `http_req_duration` | 2000 | 1,920 ms | 1,929 ms | 5×10⁻⁶⁶| 0.053  | **Negligible** |
-| `http_req_duration` | 5000 | 2,069 ms | 1,993 ms | 3×10⁻¹⁵³| 0.082 | **~4%** |
-| `total_process_ns`  | 500  | 1,532 ms | 2,009 ms | 1.0     | -0.027 | **Python wins** |
-| `total_process_ns`  | 2000 | 1,891 ms | 2,092 ms | 1×10⁻⁸⁴| 0.060  | **~10%** |
-| `total_process_ns`  | 5000 | 1,949 ms | 2,010 ms | 2×10⁻¹³⁷| 0.078 | **~3%** |
+| Metric | RPS | Python P50 | Python P99 95% CI | C++ P50 | C++ P99 95% CI | p-value | Effect Size *r* | C++ Advantage |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| Engine Latency | 500 | 6,761 ns | [38,748, 48,760] ns | 6,587 ns | [33,393, 38,778] ns | 8×10⁻³² | 0.052 | **~3%** |
+| Engine Latency | 2000 | 6,451 ns | [38,551, 45,898] ns | 6,237 ns | [32,302, 36,629] ns | 8×10⁻⁷⁰ | 0.075 | **~3%** |
+| Engine Latency | 5000 | 6,493 ns | [38,438, 45,829] ns | 6,290 ns | [31,706, 37,872] ns | 3×10⁻⁶⁷ | 0.074 | **~3%** |
+| HTTP Request | 500 | 1,280 ms | [3,745, 4,634] ms | 1,349 ms | [5,000, 5,001] ms | 1.0 | -0.067 | **Python wins** |
+| HTTP Request | 2000 | 1,920 ms | [3,694, 3,743] ms | 1,929 ms | [3,426, 3,466] ms | 5×10⁻⁶⁶ | 0.053 | **Negligible** |
+| HTTP Request | 5000 | 2,069 ms | [3,972, 4,239] ms | 1,993 ms | [3,502, 3,598] ms | 3×10⁻¹⁵³ | 0.082 | **~4%** |
+| Total Process | 500 | 902 ms | [3,161, 3,293] ms | 933 ms | [2,966, 3,054] ms | 1.0 | -0.027 | **Python wins** |
+| Total Process | 2000 | 1,560 ms | [3,089, 3,163] ms | 1,622 ms | [2,984, 3,032] ms | 1×10⁻⁸⁴ | 0.060 | **~10%** |
+| Total Process | 5000 | 1,738 ms | [3,403, 3,561] ms | 1,669 ms | [3,040, 3,078] ms | 2×10⁻¹³⁷ | 0.078 | **~3%** |
 
 **H3 Strongly Accepted.** The 50× speedup from Q2 has been attenuated to **~3%** in the full system. At 500 RPS, C++ is actually *slower* than Python for total process latency (p = 1.0, r = -0.027).
+This proves the hypothesis drmatically , the first 2 benchmarkings were done with the pre seeding of the orders in the cache casting the python based data structures into c++ complient data structures, which measured the raw speed of the both engines but when it came to a full path execution the FFI binding and Python data serialization into c++ data structures proved more time takking and consuming.
 
 **Engine Contribution Ratio:**
 At 5000 RPS:  Engine P99 (~38µs) / HTTP P99 (~4605ms) = 0.0008%
 The matching engine accounts for **less than 0.001%** of total API latency. Optimizing it is mathematically futile per Amdahl's Law.
 
-**The 5-Second Wall:** Both engines show `http_req_duration` clustering at ~5,000 ms for high percentiles. This is the k6 client timeout, not server processing time. The single-threaded ASGI server (Uvicorn) has a theoretical ceiling of ~40–50 RPS. Loads of 500–5,000 RPS instantly saturate the TCP listen backlog. Requests wait in OS queues until timeout.
+**The 5-Second Wall:** Both engines show `http_req_duration` clustering at ~5,000 ms for high percentiles. This is the k6 client timeout, not server processing time. The single-threaded ASGI server (Uvicorn) has a theoretical ceiling of ~40–50 RPS for CPU Bound requests. Loads of 500–5,000 RPS instantly saturate the TCP listen backlog. Requests wait in OS queues until timeout.
 
-![Q3 Paradox](analysis/plots/q3_paradox.png)
+![Q3 Paradox](benchmark/analysis/plots/q3_paradox.png)
 *Figure 4: Q3 engine latency vs. HTTP latency. The ~50× engine speedup vanishes in the full system.*
 
 
 ---
 
-### 5.4 Cross-Question Synthesis
-
+### 6.4 Cross-Question
 | Question | C++ Advantage | Mechanism | Real-World Relevance |
 |:---------|:-----------:|:----------|:---------------------|
 | **Q2** (Isolated) | **50×** | Memory layout, cache locality, zero-allocation | High — if engine is the bottleneck |
-| **Q1** (Concurrent) | **2–4×** throughput, **60–450×** queue time | GIL vs. mutex | High — C++ prevents queue collapse |
+| **Q1** (Concurrent) | **2–4×** throughput, **60–450×** queue time | GIL vs. mutex | High — C++ prevents queue collapse upto a certain point|
 | **Q3** (Full System) | **~3%** | Amdahl's Law — I/O dominates | **Negligible** — rewrite not justified |
 
 **The Central Thesis:** Language-level optimization is only valuable when the matching engine is the bottleneck. In a decoupled microservice architecture with JWT, Redis, and HTTP serialization, the engine contributes <0.001% of latency. The optimal optimization target is **not the engine** — it is the I/O boundary (in-memory risk, binary protocols, kernel-bypass networking).
 
 ---
 
-## 6. Conclusions
+## 7. Conclusions
 
-### 6.1 Hypothesis Validation
+### 7.1 Hypothesis Validation
 
 | Hypothesis | Verdict | Evidence |
 |:-----------|:-------:|:---------|
@@ -402,22 +401,21 @@ The matching engine accounts for **less than 0.001%** of total API latency. Opti
 | **H2** — C++ exhibits lower matching latency | **Strongly Accepted** | 44–64× speedup in isolation; all p < 0.001, r > 0.999 |
 | **H3** — Speedup attenuated by I/O in full system | **Strongly Accepted** | Engine advantage drops to ~3%; HTTP latency dominated by middleware |
 
-### 6.2 Key Contributions
-
+### 7.2 Key Contributions
 1. **Empirical proof of the "Mutex Worse Than GIL" phenomenon** in order-book matching. At 4 threads, C++ mutex contention produces 2.2× worse P99 tail latency than Python's serialized execution.
 2. **Quantification of Amdahl's Law** in a real trading system. The engine contribution ratio is <0.001%, making language rewrites economically irrational.
 3. **A reproducible benchmarking framework** for polyglot microservices, including deterministic replay, controlled variables, and non-parametric statistical testing.
 
-![Synthesis](analysis/plots/synthesis_attenuation.png)
+![Synthesis](benchmark/analysis/plots/synthesis_attenuation.png)
 *Figure 5: Cross-question synthesis. C++ advantage attenuates from 50× → 3× → <0.001% as system scope expands.*
 
-### 6.3 Limitations
+### 7.3 Limitations
 
 - **Hardware:** Consumer-grade laptop (i7-1355U, 8GB RAM) with WSL2 virtualization. Results may differ on server-grade hardware with more cores and lower virtualization overhead.
 - **Sample Size:** 5 trials per cell provides adequate power for Mann-Whitney U but limits generalization to rare events.
 - **Synthetic Workload:** Ornstein-Uhlenbeck price distribution is realistic but not market data. Real-world skew and burst patterns may alter queue dynamics.
 
-### 6.4 Future Work
+### 7.4 Future Work
 1. **Lock-Free C++ Engine:** Replace `std::mutex` with per-price-level sharding or lock-free data structures to reclaim the 4-thread advantage.
 2. **In-Memory Risk:** Colocate balance validation with the matching engine to eliminate the Redis round-trip.
 3. **Binary Protocols:** Replace HTTP/JSON with FIX or SBE over kernel-bypass networking (DPDK / RDMA).
